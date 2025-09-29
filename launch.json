@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Node with build and logging",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm start 2>&1 | tee -a ops/logs/debug.log",
+      "preLaunchTask": "build",
+      "env": {
+        "LOG_DIR": "${workspaceFolder}/ops/logs"
+      }
+    },
+    {
+      "name": "Run Python with build and logging",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "preLaunchTask": "build",
+      "env": {
+        "LOG_DIR": "${workspaceFolder}/ops/logs"
+      },
+      "args": [
+        "--log-dir",
+        "ops/logs"
+      ],
+      "justMyCode": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Build and Run All",
+      "configurations": [
+        "Run Node with build and logging",
+        "Run Python with build and logging"
+      ]
+    }
+  ]
+}

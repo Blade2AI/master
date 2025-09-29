@@ -1,0 +1,43 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Application",
+            "program": "${workspaceFolder}/src/app.ts",
+            "preLaunchTask": "build",
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ],
+            "console": "integratedTerminal",
+            "postDebugTask": "logOutput"
+        }
+    ],
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "build",
+                "type": "shell",
+                "command": "tsc",
+                "group": {
+                    "kind": "build",
+                    "isDefault": true
+                },
+                "problemMatcher": ["$tsc"],
+                "presentation": {
+                    "reveal": "always",
+                    "panel": "shared"
+                }
+            },
+            {
+                "label": "logOutput",
+                "type": "shell",
+                "command": "node ${workspaceFolder}/src/app.js > ${workspaceFolder}/ops/logs/output.log 2>&1",
+                "group": "none",
+                "problemMatcher": []
+            }
+        ]
+    }
+}

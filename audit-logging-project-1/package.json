@@ -1,0 +1,22 @@
+{
+  "name": "audit-logging-project",
+  "version": "1.0.0",
+  "description": "A project for auditing logs with TypeScript",
+  "main": "src/app.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "tsc -w",
+    "log": "node dist/app.js > ops/logs/output.log 2>&1"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/audit-logging-project.git"
+  },
+  "author": "Your Name",
+  "license": "MIT"
+}

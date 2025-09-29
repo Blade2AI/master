@@ -1,0 +1,43 @@
+.matrixTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.matrixTable th, .matrixTable td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.matrixTable th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+.matrixTable tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.matrixTable tr:hover {
+    background-color: #f1f1f1;
+}
+
+.copyButton {
+    cursor: pointer;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    margin: 4px 2px;
+    transition-duration: 0.4s;
+    border-radius: 5px;
+}
+
+.copyButton:hover {
+    background-color: white;
+    color: black;
+    border: 1px solid #4CAF50;
+}
