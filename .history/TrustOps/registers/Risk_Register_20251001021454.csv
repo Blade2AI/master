@@ -1,0 +1,4 @@
+RiskID,Area,Description,Likelihood,Impact,Owner,Mitigation,Trigger,Status
+R-01,Legal,Charges proceed despite weak evidence,Med,High,Chair,Early CPS review + solicitor letter,Pre-charge review date,Open
+R-02,Ops,Burnout of Ceri,Med,Med,Steven,Limit spend band + team support + rest days,Missed SITREPs,Open
+R-03,Reputation,Public narrative hijacked,Med,High,Scott,Fact-only comms + evidence pack,Press inquiry spike,Open

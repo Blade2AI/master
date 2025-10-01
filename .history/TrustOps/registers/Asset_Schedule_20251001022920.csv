@@ -1,0 +1,4 @@
+AssetID,Type,Description,Owner,Status,Next Step
+AS-001,IP,Domains (list),To be assigned,Open,Compile inventory
+AS-002,Devices,Endpoints (serials),To be assigned,Open,Tag and record
+AS-003,Shares,Operating entities,To be assigned,Open,Prepare assignment

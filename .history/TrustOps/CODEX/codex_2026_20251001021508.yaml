@@ -1,0 +1,30 @@
+mission_code: Sovereign-Rebuild AUTOMATION OF COMMAND-7956
+core_objective: Build a self-sustaining AI-governed ecosystem for truth-based economic recovery.
+pillars:
+  - Offline-first, trauma-aware AI mesh (PIOPL)
+  - Truth-anchored economic engine (Fish, Peptides, Housing)
+  - Governance + Legal Layer (Trust + DAO hybrid)
+  - Community training + onboarding (TruthHub + DIVA-ND)
+  - Symbol + Pattern Intelligence Stack
+roles:
+  steward_operator: Ceri
+  chair: Steven Jones
+  finance_ops: Scott Hill
+  protector: TBC
+  settlor_appointer: Andrew Jones
+policies:
+  distributions: earn_not_entitled
+  spend_band_operator: "min(£2k, 0.5% monthly run rate)"
+  conflict_management: "independent trustee + protector veto"
+cadence:
+  daily: ops_checkin
+  weekly: trustee_sitrep
+  monthly: board_pack_review
+action_sources:
+  - Police_Case
+  - Hotel_Deal
+  - Trust_Setup
+  - Ops
+  - Finance
+  - Community
+sovereign_rule: "No direct AI-core access for operators; Operator Dashboard only."

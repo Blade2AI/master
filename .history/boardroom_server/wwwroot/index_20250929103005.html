@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Boardroom Visual Management</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #0b1220; color: #E6EDF3; }
+    header { padding: 16px 24px; background: #0f172a; border-bottom: 1px solid #233; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 16px; min-height: 260px; }
+    .muted { color: #9CA3AF; font-size: 12px; }
+    h1 { margin: 0 0 8px 0; font-size: 20px; }
+    h2 { margin: 0 0 8px 0; font-size: 16px; }
+    .kpi { font-size: 28px; font-weight: 700; color: #22c55e; }
+  </style>
+  <script>
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/status', { cache: 'no-store' });
+        const data = await res.json();
+        document.getElementById('pulse').textContent = data.pulse || 'unknown';
+        document.getElementById('impact').textContent = data.financial_impact || '£0/min';
+        document.getElementById('next').textContent = data.next_pulse_due || '-';
+
+        const panels = data.panels || [];
+        const names = ['panel1','panel2','panel3'];
+        names.forEach((id, i) => {
+          const n = document.getElementById(id + '-name');
+          const d = document.getElementById(id + '-details');
+          if (panels[i]) {
+            n.textContent = panels[i].name || '';
+            d.textContent = panels[i].details || '';
+          }
+        });
+      } catch (e) {
+        console.error('status error', e);
+      }
+    }
+    setInterval(fetchStatus, 15 * 60 * 1000);
+    window.addEventListener('load', fetchStatus);
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Sovereign Boardroom</h1>
+    <div class="muted">Pulse: <span id="pulse">-</span> • Financial impact: <span class="kpi" id="impact">-</span> • Next pulse: <span id="next">-</span></div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2 id="panel1-name">Command Pulse</h2>
+      <div class="muted" id="panel1-details">15-min cycle status; Financial impact; Next action required</div>
+    </section>
+    <section class="card">
+      <h2 id="panel2-name">Risk Register Live</h2>
+      <div class="muted" id="panel2-details">5M model visualization; High-risk items; Auto-prioritized actions</div>
+    </section>
+    <section class="card">
+      <h2 id="panel3-name">Mistake Transmutation</h2>
+      <div class="muted" id="panel3-details">Errors → £ gains; Governance improvements; Real-time financial position</div>
+    </section>
+  </main>
+</body>
+</html>

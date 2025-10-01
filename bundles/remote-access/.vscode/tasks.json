@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json.schemastore.org/tasks.json",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Console: Generate self-signed TLS cert",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "mkdir -p .console; if [ ! -f .console/ttyd.crt ] || [ ! -f .console/ttyd.key ]; then openssl req -x509 -nodes -newkey rsa:2048 -keyout .console/ttyd.key -out .console/ttyd.crt -subj '/CN=localhost' -days 365; echo 'Created new self-signed cert in .console'; else echo 'TLS cert already exists, skipping'; fi"
+      ],
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "Console: Start TLS (localhost:7681)",
+      "type": "shell",
+      "command": "bash",
+      "args": ["-lc", "./scripts/console_start.sh"],
+      "dependsOn": ["Console: Generate self-signed TLS cert"],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Console: Stop",
+      "type": "shell",
+      "command": "bash",
+      "args": ["-lc", "./scripts/console_stop.sh"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Export PDF (host Edge/Chrome)",
+      "type": "shell",
+      "options": { "shell": { "executable": "powershell" } },
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "${workspaceFolder}/scripts/export_pdf.ps1",
+        "-InputHtml", "${input:html}",
+        "-OutputPdf", "${input:pdf}",
+        "-Landscape:$${input:landscape}"
+      ]
+    },
+    {
+      "label": "Quick Verify Logs",
+      "type": "shell",
+      "options": { "shell": { "executable": "powershell" } },
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-Command",
+        "Get-ChildItem -Path $env:TEMP -Filter '*boardroom*.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | Format-Table Name,LastWriteTime,Length; Get-ChildItem -Path $env:TEMP -Filter 'nightly_build_*.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | Format-Table Name,LastWriteTime,Length"
+      ]
+    }
+  ],
+  "inputs": [
+    { "id": "html", "type": "promptString", "description": "Path to HTML file", "default": "Codex/Charts/CodexKey_TypographyOfIdentity.html" },
+    { "id": "pdf", "type": "promptString", "description": "Output PDF path", "default": "out/CodexKey_TypographyOfIdentity.pdf" },
+    { "id": "landscape", "type": "pickString", "description": "Landscape page orientation?", "options": ["true", "false"], "default": "false" }
+  ]
+}

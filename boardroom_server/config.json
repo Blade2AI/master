@@ -1,0 +1,14 @@
+{
+  "AllowedLoopbackOnly": true,
+  "BiometricLogPath": "C:\\Biometric\\access.log",
+  "PhysicalPresenceWindowMinutes": 5,
+  "CriticalCommands": ["deploy", "transfer", "authorize"],
+  "StatusFile": "C:\\ProgramData\\Boardroom\\status.json",
+  "LogRoot": "C:\\ProgramData\\Boardroom\\Vault_Log",
+  "DashboardRoot": "C:\\ProgramData\\Boardroom\\wwwroot",
+  "AllowedClientThumbprints": [],
+  "IdeaQueueFile": "C:\\ProgramData\\Boardroom\\Idea_Queue.json",
+  "IdeaQueueEncrypt": false,
+  "IdeaQueueKeyPath": "",
+  "ImpactThreshold": 10000
+}

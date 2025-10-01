@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/tasks.json",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "TrustOps: New NHSBSA proforma",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File",
+        "${workspaceFolder}/TrustOps/scripts/new_nhsbsa_proforma.ps1",
+        "-Title", "${input:title}",
+        "-Org", "${input:org}",
+        "-RequesterName", "${input:reqname}",
+        "-RequesterRole", "${input:reqrole}",
+        "-ContactEmail", "${input:email}",
+        "-Domain", "${input:domain}",
+        "-Route", "${input:route}",
+        "-LawfulBasis", "${input:lawful}",
+        "-Purpose", "${input:purpose}",
+        "-Benefit", "${input:benefit}",
+        "-DateFrom", "${input:dateFrom}",
+        "-DateTo", "${input:dateTo}",
+        "-GeogScope", "${input:geog}",
+        "-DataCategory", "${input:category}"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    { "id": "title", "type": "promptString", "description": "Title" },
+    { "id": "org", "type": "promptString", "description": "Organisation" },
+    { "id": "reqname", "type": "promptString", "description": "Requester name" },
+    { "id": "reqrole", "type": "promptString", "description": "Requester role" },
+    { "id": "email", "type": "promptString", "description": "Contact email" },
+    { "id": "domain", "type": "pickString", "description": "Domain", "options": ["Prescription","Dental","Ophthalmic"], "default": "Prescription" },
+    { "id": "route", "type": "pickString", "description": "Route", "options": ["Public dataset","Ad hoc","Academic Research","Patient","NHSCFA/LCFS","FOI"], "default": "Ad hoc" },
+    { "id": "lawful", "type": "promptString", "description": "Lawful basis (e.g., Public task, Legal obligation)" },
+    { "id": "purpose", "type": "promptString", "description": "Purpose" },
+    { "id": "benefit", "type": "promptString", "description": "Public benefit" },
+    { "id": "dateFrom", "type": "promptString", "description": "From (YYYY-MM)" },
+    { "id": "dateTo", "type": "promptString", "description": "To (YYYY-MM)" },
+    { "id": "geog", "type": "promptString", "description": "Geography/Org scope" },
+    { "id": "category", "type": "pickString", "description": "Data category", "options": ["Aggregated","De-identified","Pseudonymised","Patient identifiable"], "default": "Aggregated" }
+  ]
+}

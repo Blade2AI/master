@@ -1,0 +1,25 @@
+{
+  "name": "Remote Access Bundle",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/powershell:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.powershell"
+      ]
+    }
+  },
+  "forwardPorts": [7681],
+  "portsAttributes": { "7681": { "label": "Remote Web Console" } },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y chromium ttyd openssl ca-certificates fonts-liberation fonts-noto-color-emoji fonts-noto-cjk && sudo fc-cache -f && mkdir -p ${containerWorkspaceFolder}/.console && sudo chown -R node:node ${containerWorkspaceFolder}/.console && chmod +x ${containerWorkspaceFolder}/scripts/console_start.sh ${containerWorkspaceFolder}/scripts/console_stop.sh || true",
+  "remoteUser": "node",
+  "containerEnv": {
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TTYD_PORT": "7681",
+    "TTYD_CERT": "${containerWorkspaceFolder}/.console/ttyd.crt",
+    "TTYD_KEY": "${containerWorkspaceFolder}/.console/ttyd.key"
+  }
+}
