@@ -1,0 +1,19 @@
+{
+  // VS Code tasks for automation
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "TrustOps: Passive Income Report",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy","Bypass",
+        "-File",
+        "${workspaceFolder}/TrustOps/scripts/passive_income_report.ps1"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
