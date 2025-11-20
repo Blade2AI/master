@@ -6,7 +6,7 @@ import sqlite3
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 DB_PATH = Path(__file__).resolve().parent / "sovereign_model.sqlite"
 RECEIPTS_DIR = Path(__file__).resolve().parent / "receipts"
@@ -29,9 +29,14 @@ class SovereignReceipt:
     drift_details: Optional[List[Dict]] = None
     timestamp: int = int(time.time())
 
+def _column_exists(cur: sqlite3.Cursor, table: str, column: str) -> bool:
+    cur.execute(f"PRAGMA table_info({table})")
+    return any(row[1] == column for row in cur.fetchall())
+
 def init_db() -> None:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
+    # Base table
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS sovereign_answers (
@@ -40,10 +45,12 @@ def init_db() -> None:
             question TEXT NOT NULL,
             raw_answer TEXT NOT NULL,
             explained_answer TEXT,
+            audit_receipt TEXT,
             created_at TEXT NOT NULL
         )
         """
     )
+    # Assistant messages table
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS assistant_messages (
@@ -57,6 +64,9 @@ def init_db() -> None:
         )
         """
     )
+    # Migration: ensure audit_receipt column exists (older schema compatibility)
+    if not _column_exists(cur, "sovereign_answers", "audit_receipt"):
+        cur.execute("ALTER TABLE sovereign_answers ADD COLUMN audit_receipt TEXT")
     conn.commit()
     conn.close()
 
@@ -66,17 +76,32 @@ def write_receipt_json(receipt: SovereignReceipt) -> Path:
         json.dump(asdict(receipt), f, indent=2, ensure_ascii=False)
     return path
 
-def store_answer_and_receipt(receipt: SovereignReceipt, question: str, raw_answer: str, explained_answer: Optional[str] = None) -> None:
+def store_answer_and_receipt(
+    receipt: SovereignReceipt,
+    question: str,
+    raw_answer: str,
+    explained_answer: Optional[str] = None,
+    audit_receipt: Optional[Dict[str, Any]] = None,
+) -> None:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    audit_json = json.dumps(audit_receipt, ensure_ascii=False) if audit_receipt is not None else None
     cur.execute(
         """
         INSERT OR REPLACE INTO sovereign_answers
-            (answer_id, receipt_id, question, raw_answer, explained_answer, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+            (answer_id, receipt_id, question, raw_answer, explained_answer, audit_receipt, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (receipt.answer_id, receipt.receipt_id, question, raw_answer, explained_answer, now),
+        (
+            receipt.answer_id,
+            receipt.receipt_id,
+            question,
+            raw_answer,
+            explained_answer,
+            audit_json,
+            now,
+        ),
     )
     conn.commit()
     conn.close()

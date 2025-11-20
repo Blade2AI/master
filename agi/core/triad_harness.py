@@ -6,7 +6,7 @@ import time, json, hashlib, uuid
 
 from .roles import validator, arbiter, specialist, interpreter
 from .assistant_channel import get_assistant_system_prompt
-from .receipt import SovereignReceipt, write_receipt_json, store_answer_and_receipt
+from .receipt import SovereignReceipt, write_receipt_json, store_answer_and_receipt, init_db
 try:
     from .drift_detector import detect_drift
 except ImportError:
@@ -15,7 +15,7 @@ except ImportError:
 
 ResponseMode = Literal["raw", "explained", "discussion"]
 ROOT_DIR = Path(__file__).resolve().parent
-DEFAULT_POLICY_VERSION = "v0.1a"
+DEFAULT_POLICY_VERSION = "v0.1c"
 DEFAULT_MODEL_ID = "stack-routed"
 
 def _hash_text(text: str) -> str:
@@ -30,6 +30,7 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
     drifts = detect_drift(ROOT_DIR)
     drift_flag = len(drifts) > 0
 
+    # Specialist invocation (now returns receipt metadata inside result['receipt'])
     spec_out = specialist.run_specialist(question, context)
     val_out = validator.run_validator(spec_out, context)
     arb_out = arbiter.run_arbiter(spec_out, val_out, context)
@@ -75,13 +76,24 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
     )
 
     receipt_path = write_receipt_json(receipt)
-    store_answer_and_receipt(receipt, question, raw_answer, explained_answer if mode == "explained" else None)
 
     visible_answer = explained_answer if (mode in ("explained", "discussion") and explained_answer) else raw_answer
-    enriched_receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
-    enriched_receipt["validator"] = {"policy_ok": val_out.get("policy_ok", True), "violations": val_out.get("violations", [])}
-    enriched_receipt["arbiter_status"] = arb_out.get("status", "OK")
-    Path(receipt_path).write_text(json.dumps(enriched_receipt, indent=2), encoding="utf-8")
+
+    # Enrich receipt JSON with validator + arbiter + model forensic metadata
+    enriched = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+    enriched["validator"] = {"policy_ok": val_out.get("policy_ok", True), "violations": val_out.get("violations", [])}
+    enriched["arbiter_status"] = arb_out.get("status", "OK")
+    enriched["calls"] = {"specialist": spec_out.get("meta", {}), "specialist_receipt": spec_out.get("receipt")}
+    Path(receipt_path).write_text(json.dumps(enriched, indent=2), encoding="utf-8")
+
+    # Persist answer with full audit receipt
+    store_answer_and_receipt(
+        receipt,
+        question,
+        raw_answer,
+        explained_answer if mode == "explained" else None,
+        audit_receipt=enriched,
+    )
 
     return {
         "answer": visible_answer,
@@ -91,10 +103,9 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
         "violations": val_out.get("violations", []),
         "policy_ok": val_out.get("policy_ok", True),
         "receipt_path": str(receipt_path),
-        "receipt": enriched_receipt,
+        "receipt": enriched,
     }
 
 if __name__ == "__main__":
-    from .receipt import init_db
     init_db()
     print(json.dumps(run_triad("Explain lawful property acquisition strategies", mode="explained"), indent=2))
