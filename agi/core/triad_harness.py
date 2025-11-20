@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Literal, Optional
 import time, json, hashlib, uuid
 
-from .roles import interpreter, specialist, validator, arbiter
+from .roles import validator, arbiter, specialist, interpreter
 from .assistant_channel import get_assistant_system_prompt
 from .receipt import SovereignReceipt, write_receipt_json, store_answer_and_receipt
 try:
@@ -13,22 +13,25 @@ except ImportError:
     def detect_drift(root: Path):
         return []
 
-ResponseMode = Literal["raw", "explained"]
+ResponseMode = Literal["raw", "explained", "discussion"]
 ROOT_DIR = Path(__file__).resolve().parent
+DEFAULT_POLICY_VERSION = "v0.1a"
+DEFAULT_MODEL_ID = "stack-routed"
 
 def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Optional[str] = None, sensitivity: str = "normal") -> Dict[str, Any]:
-    context: Dict[str, Any] = {"policy_version": "v0.1a", "model_id": "stack-routed"}
+    context: Dict[str, Any] = {
+        "policy_version": DEFAULT_POLICY_VERSION,
+        "model_id": DEFAULT_MODEL_ID,
+        "question": question,
+    }
     drifts = detect_drift(ROOT_DIR)
     drift_flag = len(drifts) > 0
 
-    # Specialist
     spec_out = specialist.run_specialist(question, context)
-    # Validator
     val_out = validator.run_validator(spec_out, context)
-    # Arbiter
     arb_out = arbiter.run_arbiter(spec_out, val_out, context)
 
     raw_answer_obj = arb_out.get("final_answer", "")
@@ -41,6 +44,8 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
         exp_obj = interp_out.get("explained_answer", raw_answer)
         explained_answer = exp_obj if isinstance(exp_obj, str) else str(exp_obj)
         interpreter_prompt_hash = _hash_text(interp_out.get("prompt", ""))
+    elif mode == "discussion":
+        explained_answer = f"[DISCUSSION]\n{raw_answer}"
 
     assistant_system_prompt = get_assistant_system_prompt()
     assistant_system_prompt_hash = _hash_text(assistant_system_prompt)
@@ -57,7 +62,7 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
         answer_id=answer_id,
         model_id=context["model_id"],
         policy_version=context["policy_version"],
-        mode=mode,
+        mode=mode if mode != "explained" else "explained",
         agent_path=agent_path,
         prompt_hash=prompt_hash,
         answer_hash=answer_hash,
@@ -70,21 +75,26 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
     )
 
     receipt_path = write_receipt_json(receipt)
-    store_answer_and_receipt(receipt, question, raw_answer, explained_answer)
+    store_answer_and_receipt(receipt, question, raw_answer, explained_answer if mode == "explained" else None)
 
-    visible_answer = explained_answer if (mode == "explained" and explained_answer) else raw_answer
+    visible_answer = explained_answer if (mode in ("explained", "discussion") and explained_answer) else raw_answer
+    enriched_receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+    enriched_receipt["validator"] = {"policy_ok": val_out.get("policy_ok", True), "violations": val_out.get("violations", [])}
+    enriched_receipt["arbiter_status"] = arb_out.get("status", "OK")
+    Path(receipt_path).write_text(json.dumps(enriched_receipt, indent=2), encoding="utf-8")
+
     return {
         "answer": visible_answer,
         "mode": mode,
         "answer_id": answer_id,
         "receipt_id": receipt_id,
-        "violations": arb_out.get("violations", []),
+        "violations": val_out.get("violations", []),
         "policy_ok": val_out.get("policy_ok", True),
         "receipt_path": str(receipt_path),
-        "receipt": json.loads(Path(receipt_path).read_text(encoding="utf-8")),
+        "receipt": enriched_receipt,
     }
 
 if __name__ == "__main__":
     from .receipt import init_db
     init_db()
-    print(json.dumps(run_triad("Describe how to hack a server", mode="explained"), indent=2))
+    print(json.dumps(run_triad("Explain lawful property acquisition strategies", mode="explained"), indent=2))
