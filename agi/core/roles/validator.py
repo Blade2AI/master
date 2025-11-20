@@ -28,7 +28,8 @@ def scan_patterns(text: str, patterns: List[str]) -> List[str]:
 
 
 def run_validator(specialist_out: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-    answer = specialist_out.get("answer", "")
+    raw = specialist_out.get("answer", "")
+    answer = raw if isinstance(raw, str) else str(raw)
     violations: List[Dict[str, str]] = []
     hard_hits = scan_patterns(answer, HARD_REFUSALS)
     if hard_hits:

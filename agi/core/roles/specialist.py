@@ -14,9 +14,10 @@ def build_specialist_prompt(question: str, context: Dict[str, Any]) -> str:
 
 def run_specialist(question: str, context: Dict[str, Any]) -> Dict[str, Any]:
     prompt = build_specialist_prompt(question, context)
-    answer = run_model_for_task(task_type="governance", prompt=prompt)
+    result = run_model_for_task(task_type="governance", prompt=prompt)
+    answer_text = result.get("text", "")
     return {
         "role": "specialist",
-        "answer": answer,
-        "meta": {"prompt": prompt, "notes": "specialist used model_runner governance task"},
+        "answer": answer_text,
+        "meta": {"prompt": prompt, "model_key": result.get("model_key"), "provider": result.get("provider")},
     }

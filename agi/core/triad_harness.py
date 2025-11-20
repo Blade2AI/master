@@ -31,12 +31,15 @@ def run_triad(question: str, mode: ResponseMode = "raw", parent_receipt_id: Opti
     # Arbiter
     arb_out = arbiter.run_arbiter(spec_out, val_out, context)
 
-    raw_answer = arb_out.get("final_answer", "")
+    raw_answer_obj = arb_out.get("final_answer", "")
+    raw_answer = raw_answer_obj if isinstance(raw_answer_obj, str) else str(raw_answer_obj)
+
     explained_answer: Optional[str] = None
     interpreter_prompt_hash: Optional[str] = None
     if mode == "explained":
         interp_out = interpreter.run_interpreter(question, raw_answer, context)
-        explained_answer = interp_out.get("explained_answer", raw_answer)
+        exp_obj = interp_out.get("explained_answer", raw_answer)
+        explained_answer = exp_obj if isinstance(exp_obj, str) else str(exp_obj)
         interpreter_prompt_hash = _hash_text(interp_out.get("prompt", ""))
 
     assistant_system_prompt = get_assistant_system_prompt()
