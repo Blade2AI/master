@@ -1,0 +1,17 @@
+# Sovereign runtime data (never commit)
+data/
+Evidence/
+Property/
+Governance/Logs/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# VS Code
+# .vscode/ (now versioned)
+.history/
