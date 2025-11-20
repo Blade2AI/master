@@ -1,4 +1,10 @@
-# Sovereign Model Policy (v0.1a)
+# SOVEREIGN MODEL POLICY v0.1a
+
+> Updated for Interpreter mode and Assistant channel constraints.
+> This version defines:
+> - explainability roles
+> - assistant guardrails
+> - extended agent_path
 
 Foundational policy defining permitted behaviour, enforcement layers, and explainability / discussion extensions.
 
@@ -101,4 +107,8 @@ It MUST NOT:
 - Multi-org policy overlays.
 
 ---
+> **Current policy version:** v0.1a  
+> **Signed by:** [Andy / Steven / Operator]  
+> **Date:** [2025-11-20]
+
 End of Policy v0.1a
