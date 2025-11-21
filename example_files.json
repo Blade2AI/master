@@ -1,0 +1,35 @@
+{
+  "scan_date": "2025-09-01T18:53:25.151370",
+  "criteria": {
+    "older_than_days": 30,
+    "min_size_mb": 5
+  },
+  "categories": {
+    "cache_files": [
+      {
+        "path": "/home/runner/.npm/_cacache/content-v2/sha512/ee/06/ab6078b80464b29848f4db9f79cee5103012f5d1006802ef78ba9a3ec8d9a456cc3852f480ed36f1bc259dbde22b65a5cd4dcf7a6bda75f965c7d821d6e8",
+        "size_mb": 16.05,
+        "modified": "2025-09-01T18:48:00.884117",
+        "is_old": false,
+        "is_large": true,
+        "reason": "old_or_large"
+      },
+      {
+        "path": "/home/runner/.npm/_cacache/content-v2/sha512/ad/fd/709db9dc433e0d510b5381da0e91a99779a33f9afc8bebf19ec23a981aca0cbb3e71d3ff01a52964936d8cb6428e05bda3692675a88026d66d3f1d3cfdac",
+        "size_mb": 14.15,
+        "modified": "2025-09-01T18:48:00.753117",
+        "is_old": false,
+        "is_large": true,
+        "reason": "old_or_large"
+      }
+    ],
+    "browser_cache": [],
+    "old_downloads": [],
+    "large_media": []
+  },
+  "summary": {
+    "total_files": 2,
+    "total_size_mb": 30.2,
+    "total_size_gb": 0.03
+  }
+}

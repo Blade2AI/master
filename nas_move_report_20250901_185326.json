@@ -1,0 +1,15 @@
+{
+  "operation": "nas_move",
+  "timestamp": "2025-09-01T18:53:26.332951",
+  "nas_path": "/tmp/demo_nas",
+  "dry_run": true,
+  "verify_checksums": true,
+  "summary": {
+    "total_files_processed": 0,
+    "successful_moves": 0,
+    "failed_moves": 0,
+    "total_size_moved_mb": 0.0
+  },
+  "moved_files": [],
+  "failed_moves": []
+}

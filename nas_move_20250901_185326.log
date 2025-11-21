@@ -1,0 +1,5 @@
+2025-09-01 18:53:26,332 - INFO - Processing 2 files from example_files.json
+2025-09-01 18:53:26,332 - INFO - Processing category: cache_files (2 files)
+2025-09-01 18:53:26,332 - INFO - [DRY RUN] Would move: /home/runner/.npm/_cacache/content-v2/sha512/ee/06/ab6078b80464b29848f4db9f79cee5103012f5d1006802ef78ba9a3ec8d9a456cc3852f480ed36f1bc259dbde22b65a5cd4dcf7a6bda75f965c7d821d6e8 -> /tmp/demo_nas/pc_migration/cache_files/2025-09-01/ab6078b80464b29848f4db9f79cee5103012f5d1006802ef78ba9a3ec8d9a456cc3852f480ed36f1bc259dbde22b65a5cd4dcf7a6bda75f965c7d821d6e8
+2025-09-01 18:53:26,332 - INFO - [DRY RUN] Would move: /home/runner/.npm/_cacache/content-v2/sha512/ad/fd/709db9dc433e0d510b5381da0e91a99779a33f9afc8bebf19ec23a981aca0cbb3e71d3ff01a52964936d8cb6428e05bda3692675a88026d66d3f1d3cfdac -> /tmp/demo_nas/pc_migration/cache_files/2025-09-01/709db9dc433e0d510b5381da0e91a99779a33f9afc8bebf19ec23a981aca0cbb3e71d3ff01a52964936d8cb6428e05bda3692675a88026d66d3f1d3cfdac
+2025-09-01 18:53:26,333 - INFO - Move report saved to: nas_move_report_20250901_185326.json
