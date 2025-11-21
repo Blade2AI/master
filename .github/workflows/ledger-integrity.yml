@@ -1,0 +1,48 @@
+name: ledger-integrity
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  verify-ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure ledger & seal exist
+        run: |
+          if [ ! -f FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv ]; then echo "Missing clean ledger"; exit 1; fi
+          if [ ! -f FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv.hash.txt ]; then echo "Missing hash seal"; exit 1; fi
+      - name: Extract sealed hash
+        id: seal
+        run: |
+          SEALED=$(grep '^SHA256=' FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv.hash.txt | cut -d= -f2)
+          echo "sealed=$SEALED" >> $GITHUB_OUTPUT
+      - name: Compute current hash
+        id: current
+        run: |
+          CUR=$(sha256sum FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv | awk '{print $1}')
+          echo "current=$CUR" >> $GITHUB_OUTPUT
+      - name: Compare hashes
+        run: |
+          if [ "${{ steps.seal.outputs.sealed }}" != "${{ steps.current.outputs.current }}" ]; then
+            echo "Hash mismatch: sealed=${{ steps.seal.outputs.sealed }} current=${{ steps.current.outputs.current }}"; exit 1; fi
+          echo "Hash verified."
+      - name: Confirm no rogue entries
+        run: |
+          if grep -q ',False$' FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv; then echo "Rogue (Canonical=False) entries detected"; exit 1; fi
+          echo "No rogue entries."
+      - name: Emit summary
+        run: |
+          echo "Sealed Hash: ${{ steps.seal.outputs.sealed }}"
+          echo "Current Hash: ${{ steps.current.outputs.current }}"
+
+  scheduled-reconsolidation:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconsolidation (dry)
+        run: |
+          echo "(Optional) Implement a script to re-run consolidation here."
+          echo "Skipped: No audit sources in CI."

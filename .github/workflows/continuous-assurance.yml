@@ -1,0 +1,62 @@
+name: Continuous Assurance
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # Weekly Sunday 03:00 UTC
+  workflow_dispatch:
+  push:
+    paths:
+      - 'FINAL_LEDGER_OUTPUT/**'
+      - '.github/workflows/continuous-assurance.yml'
+
+jobs:
+  ledger-assurance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify ledger + seal presence
+        run: |
+          test -f FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv || (echo 'Missing ledger' && exit 1)
+          test -f FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv.hash.txt || (echo 'Missing seal file' && exit 1)
+      - name: Extract sealed hash
+        id: seal
+        run: |
+          SEALED=$(grep '^SHA256=' FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv.hash.txt | cut -d= -f2)
+          echo "sealed=$SEALED" >> $GITHUB_OUTPUT
+      - name: Compute current hash
+        id: current
+        run: |
+          CUR=$(sha256sum FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv | awk '{print $1}')
+          echo "current=$CUR" >> $GITHUB_OUTPUT
+      - name: Compare hashes
+        run: |
+          if [ "${{ steps.seal.outputs.sealed }}" != "${{ steps.current.outputs.current }}" ]; then
+            echo "Hash mismatch: sealed=${{ steps.seal.outputs.sealed }} current=${{ steps.current.outputs.current }}"; exit 1; fi
+          echo "Hash verified."
+      - name: Rogue entry check
+        run: |
+          if grep -q ',False$' FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv; then echo 'Rogue entries detected'; exit 1; fi
+          echo 'No rogue entries.'
+      - name: Collect metadata
+        id: meta
+        run: |
+          SIZE=$(wc -c < FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv | tr -d ' ')
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "size_bytes=$SIZE" >> $GITHUB_OUTPUT
+          echo "timestamp=$TS" >> $GITHUB_OUTPUT
+      - name: Upload ledger + seal artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-seal-${{ steps.meta.outputs.timestamp }}
+          path: |
+            FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv
+            FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger_CLEAN.csv.hash.txt
+      - name: Emit status summary
+        run: |
+          echo "### Ledger Continuous Assurance" >> $GITHUB_STEP_SUMMARY
+          echo "* Timestamp: ${{ steps.meta.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Sealed Hash: \
+${{ steps.seal.outputs.sealed }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Size (bytes): ${{ steps.meta.outputs.size_bytes }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Rogue Entries: None" >> $GITHUB_STEP_SUMMARY
+          echo "* Status: ? Integrity Verified" >> $GITHUB_STEP_SUMMARY
