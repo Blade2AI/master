@@ -237,7 +237,7 @@
             "-ShowDetailedMetrics",
             "-PingCount",
             "8"
-        ],
+        },
         "group": "test",
         "presentation": {
             "echo": true,
@@ -1539,6 +1539,18 @@
         "command": "cmd",
         "args": ["/c","start","","${workspaceFolder}/docs/dependency_validation_flow.md"],
         "problemMatcher": []
+    },
+    {
+      "label": "Preflight: Dependency Lockfiles",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy","Bypass",
+        "-File","${workspaceFolder}/scripts/Preflight-DependencyLockfiles.ps1",
+        "-Root","${workspaceFolder}"
+      ],
+      "problemMatcher": []
     }
   ],
   "inputs": [
