@@ -1,0 +1,46 @@
+name: PowerShell Lint (PSScriptAnalyzer)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'scripts/sovereign.ps1'
+      - 'scripts/**.ps1'
+  workflow_dispatch:
+
+jobs:
+  pssa:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $path = 'scripts/sovereign.ps1'
+          Write-Host "Running PSScriptAnalyzer on $path"
+          $results = Invoke-ScriptAnalyzer -Path $path -Recurse -Severity Warning,Error -ErrorAction SilentlyContinue
+          if ($results -and $results.Count -gt 0) {
+              $results | ConvertTo-Json -Depth 6 | Out-File pssa_results.json -Encoding utf8
+              Write-Host "PSScriptAnalyzer found $($results.Count) issues"
+              $results | Format-Table -AutoSize
+              exit 1
+          } else {
+              Write-Host "PSScriptAnalyzer: no issues found"
+          }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pssa-results
+          path: pssa_results.json

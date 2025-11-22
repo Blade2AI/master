@@ -5,3 +5,21 @@ Cryptographic ledger integrity is continuously verified (hash + rogue file check
 
 # master
 Project management file
+
+## Governance script: `sovereign.ps1`
+A single-file PowerShell governance stack is available at `scripts/sovereign.ps1`.
+
+Quickstart (Windows, elevated PowerShell recommended):
+
+```powershell
+# First time setup (creates directories, keys, initial attestation)
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\sovereign.ps1 -Action setup
+
+# Daily security check
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\sovereign.ps1 -Action security
+
+# Run full governance stack
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\sovereign.ps1 -Action full
+```
+
+See `docs/audit/DEPENDENCY_MANIFEST_APPENDIX.md` for dependency manifest governance and CI details.

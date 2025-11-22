@@ -237,7 +237,7 @@
             "-ShowDetailedMetrics",
             "-PingCount",
             "8"
-        },
+        ],
         "group": "test",
         "presentation": {
             "echo": true,
@@ -1550,6 +1550,19 @@
         "-File","${workspaceFolder}/scripts/Preflight-DependencyLockfiles.ps1",
         "-Root","${workspaceFolder}"
       ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Sovereign: Run Governance Script",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy","Bypass",
+        "-File","${workspaceFolder}/scripts/sovereign.ps1",
+        "-Action","verify"
+      ],
+      "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": []
     }
   ],
