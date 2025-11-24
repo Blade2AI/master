@@ -1,0 +1,237 @@
+﻿param(
+    [string]$WorkspacePath = $PSScriptRoot,
+    [string]$NasRoot = "\\dxp4800plus-67ba\ops",
+    [string]$SolutionFile = "",
+    [switch]$AutoNotify,
+    [string]$SlackWebhook = ""
+)
+
+# Import your existing notification module if available
+$notifyModule = Join-Path $PSScriptRoot "Notify-Module.psm1"
+if (Test-Path $notifyModule) {
+    Import-Module $notifyModule -Force
+}
+
+#region Configuration and Setup
+$logDir = Join-Path $env:USERPROFILE "LiveShareLogs"
+if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logFile = Join-Path $logDir "LiveShare_Host_$timestamp.log"
+$linkFile = Join-Path $NasRoot "LiveShareLink.txt"
+$statusFile = Join-Path $NasRoot "LiveShareStatus.json"
+
+# Helper function for logging
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $time = Get-Date -Format "HH:mm:ss"
+    $entry = "[$time] [$Level] $Message"
+    Write-Host $entry -ForegroundColor $(switch($Level) { "ERROR" {"Red"} "WARN" {"Yellow"} "SUCCESS" {"Green"} default {"White"} })
+    Add-Content -Path $logFile -Value $entry
+}
+
+# Cleanup handler
+$global:cleanupTriggered = $false
+Register-EngineEvent PowerShell.Exiting -Action {
+    if (-not $global:cleanupTriggered) {
+        Write-Log "🚧 Cleanup triggered - stopping Live Share session" "WARN"
+        try {
+            # Try to stop the Live Share session gracefully
+            & code --command liveshare.end 2>$null
+            # Clear the link file
+            if (Test-Path $linkFile) { Remove-Item $linkFile -Force }
+            # Update status
+            @{
+                Status = "Stopped"
+                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                Host = $env:COMPUTERNAME
+            } | ConvertTo-Json | Set-Content $statusFile -Encoding UTF8
+        } catch {
+            Write-Log "Error during cleanup: $_" "ERROR"
+        }
+        $global:cleanupTriggered = $true
+    }
+}
+#endregion
+
+try {
+    Write-Log "▶️ Starting Live Share host bootstrap on $env:COMPUTERNAME" "SUCCESS"
+    
+    # Ensure NAS connectivity
+    if (-not (Test-Path $NasRoot)) {
+        Write-Log "❌ Cannot access NAS at $NasRoot - check network connectivity" "ERROR"
+        exit 1
+    }
+    
+    Set-Location $WorkspacePath
+    
+    # Pull latest changes
+    Write-Log "🔄 Pulling latest changes from Git"
+    try {
+        $gitOutput = git pull 2>&1
+        Write-Log "Git pull result: $gitOutput"
+    } catch {
+        Write-Log "Git pull failed: $_" "WARN"
+    }
+    
+    # Find solution file if not specified
+    if (-not $SolutionFile) {
+        $solutionFiles = Get-ChildItem -Recurse -Filter "*.sln" | Where-Object { $_.FullName -notmatch "\.vscode.*extensions" }
+        if ($solutionFiles.Count -eq 1) {
+            $SolutionFile = $solutionFiles[0].FullName
+            Write-Log "🔍 Auto-detected solution: $SolutionFile"
+        } elseif ($solutionFiles.Count -gt 1) {
+            $SolutionFile = $solutionFiles[0].FullName
+            Write-Log "🔍 Multiple solutions found, using: $SolutionFile" "WARN"
+        }
+    }
+    
+    # Launch VS Code with the workspace
+    Write-Log "🚀 Launching VS Code with workspace"
+    if ($SolutionFile -and (Test-Path $SolutionFile)) {
+        Start-Process code -ArgumentList "`"$SolutionFile`""
+    } else {
+        Start-Process code -ArgumentList "`"$WorkspacePath`""
+    }
+    
+    # Wait for VS Code to start and Live Share to initialize
+    Write-Log "⏳ Waiting for VS Code and Live Share to initialize..."
+    Start-Sleep -Seconds 15
+    
+    # Check if Live Share extension is available
+    $liveShareCheck = & code --list-extensions 2>$null | Where-Object { $_ -match "ms-vsliveshare" }
+    if (-not $liveShareCheck) {
+        Write-Log "❌ Live Share extension not found. Please install it first." "ERROR"
+        Write-Log "Install with: code --install-extension ms-vsliveshare.vsliveshare" "INFO"
+        exit 1
+    }
+    
+    # Start Live Share session
+    Write-Log "🔗 Starting Live Share session..."
+    $sessionResult = & code --command liveshare.start 2>&1
+    Start-Sleep -Seconds 10
+    
+    # Try to get the Live Share link through VS Code CLI
+    Write-Log "📋 Retrieving Live Share session link..."
+    $linkRetrieved = $false
+    $attempts = 0
+    $maxAttempts = 6
+    
+    while (-not $linkRetrieved -and $attempts -lt $maxAttempts) {
+        $attempts++
+        try {
+            # Try different methods to get the link
+            $linkInfo = & code --command liveshare.showSessionDetails 2>$null
+            if ($linkInfo -match 'https?://[^\s]+') {
+                $link = $Matches[0]
+                $linkRetrieved = $true
+            } else {
+                # Alternative: check clipboard (Live Share often copies link there)
+                Add-Type -AssemblyName System.Windows.Forms
+                $clipboardText = [System.Windows.Forms.Clipboard]::GetText()
+                if ($clipboardText -match 'https://[^\s]*liveshare[^\s]*') {
+                    $link = $Matches[0]
+                    $linkRetrieved = $true
+                }
+            }
+        } catch {
+            Write-Log "Attempt $attempts failed: $_" "WARN"
+        }
+        
+        if (-not $linkRetrieved) {
+            Write-Log "⏳ Waiting for Live Share link... (attempt $attempts/$maxAttempts)"
+            Start-Sleep -Seconds 10
+        }
+    }
+    
+    if ($linkRetrieved) {
+        Write-Log "🔗 Live Share link retrieved: $link" "SUCCESS"
+        
+        # Write link to NAS for guests to consume
+        Set-Content -Path $linkFile -Value $link -Encoding ASCII
+        Write-Log "💾 Link written to $linkFile"
+        
+        # Update status file
+        $status = @{
+            Status = "Active"
+            Link = $link
+            Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            Host = $env:COMPUTERNAME
+            Workspace = $WorkspacePath
+            Solution = $SolutionFile
+        }
+        $status | ConvertTo-Json | Set-Content $statusFile -Encoding UTF8
+        Write-Log "📊 Status updated in $statusFile"
+        
+        # Send notifications if configured
+        if ($AutoNotify -and $SlackWebhook) {
+            try {
+                $payload = @{
+                    text = "🚂 **Live Share Session Started!**`n" +
+                           "Host: $env:COMPUTERNAME`n" +
+                           "Project: $(Split-Path -Leaf $WorkspacePath)`n" +
+                           "Link: $link`n" +
+                           "Join now for C++ collaboration!"
+                } | ConvertTo-Json
+                
+                Invoke-RestMethod -Uri $SlackWebhook -Method Post -Body $payload -ContentType "application/json"
+                Write-Log "📣 Notification sent to Slack" "SUCCESS"
+            } catch {
+                Write-Log "Failed to send Slack notification: $_" "WARN"
+            }
+        }
+        
+        Write-Log "✅ Live Share host is ready! Session details:" "SUCCESS"
+        Write-Log "   - Link: $link"
+        Write-Log "   - Host: $env:COMPUTERNAME"
+        Write-Log "   - Workspace: $WorkspacePath"
+        Write-Log ""
+        Write-Log "📋 Guests can:"
+        Write-Log "   1. Run the Join task in VS Code"
+        Write-Log "   2. Check $linkFile for the link"
+        Write-Log "   3. Use: code --command liveshare.join $link"
+        Write-Log ""
+        Write-Log "Press Ctrl+C to stop the session"
+        
+        # Keep the session alive
+        while ($true) {
+            Start-Sleep -Seconds 30
+            
+            # Periodic status check
+            try {
+                $sessionStatus = & code --command liveshare.showSessionDetails 2>$null
+                if (-not $sessionStatus -or $sessionStatus -match "No active session") {
+                    Write-Log "🔴 Live Share session appears to have ended" "WARN"
+                    break
+                }
+            } catch {
+                # Continue if status check fails
+            }
+        }
+        
+    } else {
+        Write-Log "❌ Failed to retrieve Live Share link after $maxAttempts attempts" "ERROR"
+        Write-Log "💡 Try starting Live Share manually in VS Code and check the status bar for the link" "INFO"
+    }
+    
+} catch {
+    Write-Log "❌ An error occurred: $_" "ERROR"
+    Write-Log $_.ScriptStackTrace "ERROR"
+} finally {
+    # Trigger cleanup
+    if (-not $global:cleanupTriggered) {
+        Write-Log "🏁 Host session ending" "INFO"
+        & {
+            try {
+                & code --command liveshare.end 2>$null
+                if (Test-Path $linkFile) { Remove-Item $linkFile -Force }
+                @{
+                    Status = "Stopped"
+                    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                    Host = $env:COMPUTERNAME
+                } | ConvertTo-Json | Set-Content $statusFile -Encoding UTF8
+            } catch { }
+        }
+        $global:cleanupTriggered = $true
+    }
+}

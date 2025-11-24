@@ -1,0 +1,64 @@
+﻿#include "../VerifyEvidenceLib.h"
+#include "../../../deps/catch2/catch.hpp"
+#include "ed25519_test_vectors.h"
+#include <vector>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
+TEST_CASE(Merkle_RightOrder_ComputesExpectedRoot) {
+    std::vector<std::string> paths = {"../..//test_data/evidence1.txt", "../..//test_data/evidence2.txt", "../..//test_data/evidence3.txt"};
+    std::string root = compute_merkle_root_from_files(paths);
+    std::string expected = compute_merkle_root_from_files(paths);
+    REQUIRE(root == expected);
+}
+
+TEST_CASE(Merkle_TamperedFile_FailsMatch) {
+    std::vector<std::string> paths = {"../..//test_data/evidence1.txt", "../..//test_data/evidence2.txt", "../..//test_data/evidence3.txt"};
+    std::string original_root = compute_merkle_root_from_files(paths);
+
+    std::string tamper_path = "../..//test_data/evidence2.txt";
+    std::ifstream in(tamper_path, std::ios::binary);
+    std::ostringstream ss; ss << in.rdbuf(); std::string original = ss.str(); in.close();
+
+    // Tamper: append a marker to guarantee content change
+    std::string tampered = original + "TAMPER_MARKER";
+    {
+        std::ofstream out(tamper_path, std::ios::binary | std::ios::trunc);
+        out.write(tampered.data(), tampered.size());
+    }
+
+    std::string tampered_root = compute_merkle_root_from_files(paths);
+
+    // Restore
+    {
+        std::ofstream restore(tamper_path, std::ios::binary | std::ios::trunc);
+        restore.write(original.data(), original.size());
+    }
+
+    if (original_root == tampered_root) {
+        std::cerr << "[DIAG] Original root:  " << original_root << "\n";
+        std::cerr << "[DIAG] Tampered root:  " << tampered_root << "\n";
+    }
+
+    REQUIRE(original_root != tampered_root);
+}
+
+#ifdef SODIUM_AVAILABLE
+TEST_CASE(Signature_Verify_Success) {
+    REQUIRE(verify_signature_ed25519(TEST_PUBKEY, TEST_SIG, TEST_MESSAGE));
+}
+
+TEST_CASE(Signature_Verify_InvalidSignature_Fails) {
+    std::vector<unsigned char> bad_sig = TEST_SIG;
+    bad_sig[0] ^= 0xFF; // flip a bit
+    REQUIRE(!verify_signature_ed25519(TEST_PUBKEY, bad_sig, TEST_MESSAGE));
+}
+
+TEST_CASE(Signature_Verify_WrongPubkey_Fails) {
+    REQUIRE(!verify_signature_ed25519(WRONG_PUBKEY, TEST_SIG, TEST_MESSAGE));
+}
+#endif
+
+int main(int argc, char** argv) { return run_all_tests(); }

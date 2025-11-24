@@ -1,0 +1,26 @@
+{
+  "liveshare.connectionMode": "direct",
+  "liveshare.allowGuestDebugControl": true,
+  "liveshare.allowGuestTaskControl": true,
+  "liveshare.guestApprovalRequired": false,
+  "liveshare.showInStatusBar": "whileCollaborating",
+  "liveshare.focusBehavior": "prompt",
+  "liveshare.joinDebugSessionOption": "Automatic",
+  "C_Cpp.default.cppStandard": "c++14",
+  "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+  "C_Cpp.default.compilerPath": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.39.33519\\bin\\Hostx64\\x64\\cl.exe",
+  "files.associations": {
+    "*.h": "cpp",
+    "*.hpp": "cpp",
+    "*.cpp": "cpp",
+    "*.c": "c"
+  },
+  "editor.formatOnSave": true,
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "workbench.colorTheme": "Default Dark+",
+  "workbench.startupEditor": "welcomePage"
+}

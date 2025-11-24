@@ -1,0 +1,58 @@
+﻿import os
+import json
+import time
+from pathlib import Path
+from src.core.config import CONFIG
+
+class SovereignRouter:
+    def __init__(self, agent_name: str):
+        self.agent_name = agent_name.lower()
+        # Resolve per-agent track (EVIDENCE_TRACK / PROPERTY_TRACK / fallback TRACK)
+        self.track = CONFIG.get_agent_track(agent_name)
+
+        # Jurisdiction roots (container volume mounts expected)
+        if self.agent_name == "evidence":
+            self.base_root = Path("/data/evidence")
+            self.output_dirs = {
+                "insider": self.base_root / "Analysis" / "_drafts",
+                "stable": self.base_root / "Analysis" / "_verified",
+            }
+        elif self.agent_name == "property":
+            self.base_root = Path("/data/property")
+            self.output_dirs = {
+                "insider": self.base_root / "Scored" / "_drafts",
+                "stable": self.base_root / "Scored" / "_production",
+            }
+        else:
+            # Generic fallback pattern for new agents
+            self.base_root = Path(f"/data/{self.agent_name}")
+            self.output_dirs = {
+                "insider": self.base_root / "Output" / "_drafts",
+                "stable": self.base_root / "Output" / "_prod",
+            }
+
+        self.target_dir = self.output_dirs.get(self.track)
+        if self.target_dir is None:
+            # Fail safe: revert to insider
+            self.track = "insider"
+            self.target_dir = self.output_dirs["insider"]
+
+        self.target_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_execution_mode(self) -> str:
+        return "SANDBOX" if self.track == "insider" else "LIVE"
+
+    def save_result(self, filename: str, data: dict) -> str:
+        status = "PENDING_REVIEW" if self.track == "insider" else "AUTO_VERIFIED"
+        data["_governance"] = {
+            "track": self.track,
+            "agent_name": self.agent_name,
+            "status": status,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        safe_filename = Path(filename).name
+        output_path = self.target_dir / safe_filename
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        print(f"[{self.agent_name.upper()} | {self.track.upper()}] Saved -> {output_path}")
+        return str(output_path)

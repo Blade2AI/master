@@ -1,0 +1,16 @@
+param(
+  [Parameter(Mandatory)] [string]$WorkspacePath,
+  [switch]$AutoLiveShare
+)
+
+Set-Location $WorkspacePath
+
+# Pull latest
+try { git pull | Out-Host } catch { Write-Host "git pull failed: $_" -ForegroundColor Yellow }
+
+# Open VS Code (if not already)
+try { Start-Process code -ArgumentList $WorkspacePath } catch { }
+
+if ($AutoLiveShare) {
+  Write-Host "Start a Live Share session from the VS Code status bar and share the link."
+}

@@ -1,0 +1,6 @@
+﻿version: 0.1.0
+files:
+  constitution/trauma_informed_standard.md: ""
+  agi/core/standards.py: ""
+  agi/core/empathy_engine.py: ""
+signature: ""

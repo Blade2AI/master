@@ -1,0 +1,61 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode/master/extensions/tasks/schemas/v3.0.0/tasks.schema.json",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Collab: Start (Pull + Open + Live Share)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-Collab.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoLiveShare"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Collab: End (Commit + Push)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/End-Collab.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-Message",
+        "${input:commitMessage}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Git: Pull",
+      "type": "shell",
+      "command": "git",
+      "args": ["pull"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Git: Push",
+      "type": "shell",
+      "command": "git",
+      "args": ["push"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "commitMessage",
+      "type": "promptString",
+      "description": "Commit message",
+      "default": "collab: update"
+    }
+  ]
+}

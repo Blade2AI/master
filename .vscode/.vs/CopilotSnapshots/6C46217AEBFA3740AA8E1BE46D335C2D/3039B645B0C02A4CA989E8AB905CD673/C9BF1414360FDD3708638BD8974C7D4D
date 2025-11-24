@@ -1,0 +1,96 @@
+﻿@echo off
+echo ===============================================
+echo  PrecisePointway Live Share Setup
+echo  "In a world you can be anything - be nice."
+echo ===============================================
+echo.
+
+echo [1/4] Checking prerequisites with care...
+where code >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ❌ VS Code not found. Please install VS Code first.
+    echo    Download: https://code.visualstudio.com/
+    echo    (We'll wait patiently while you set it up)
+    pause
+    exit /b 1
+) else (
+    echo ✅ VS Code found - ready for collaborative magic!
+)
+
+where git >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ❌ Git not found. Please install Git first.
+    echo    Download: https://git-scm.com/
+    echo    (Version control helps us collaborate with kindness)
+    pause
+    exit /b 1
+) else (
+    echo ✅ Git found - ready for kind collaboration!
+)
+
+echo.
+echo [2/4] Installing Live Share extension with love...
+code --install-extension ms-vsliveshare.vsliveshare --force
+if %errorlevel% equ 0 (
+    echo ✅ Live Share extension installed - sharing is caring!
+) else (
+    echo ⚠️  Live Share extension installation may have failed
+    echo     But we'll proceed with patience and understanding
+)
+
+echo.
+echo [3/4] Testing NAS connectivity with hope...
+if exist "\\dxp4800plus-67ba\ops" (
+    echo ✅ NAS accessible - connection made with care!
+) else (
+    echo ❌ Cannot access NAS at \\dxp4800plus-67ba\ops
+    echo    Please check network connectivity and permissions
+    echo    (Network challenges met with patience)
+    pause
+    exit /b 1
+)
+
+echo.
+echo [4/4] Workspace setup with thoughtfulness...
+if exist ".vscode\tasks.json" (
+    echo ✅ VS Code tasks configured - ready for kind collaboration!
+) else (
+    echo ⚠️  VS Code tasks not found - may need manual setup
+    echo     But every journey starts with a single step
+)
+
+echo.
+echo ===============================================
+echo  Setup Complete with Kindness! 
+echo  "In a world you can be anything - be nice."
+echo ===============================================
+echo.
+echo 🎯 Next Steps for Collaborative Kindness:
+echo.
+echo   HOST PC (Start Session with Care):
+echo   1. Open VS Code in this workspace
+echo   2. Ctrl+Shift+P ^> "Tasks: Run Task"
+echo   3. Select "LiveShare: Start Host Session (Enhanced)"
+echo   4. Share the magic of collaboration!
+echo.
+echo   GUEST PCs (Join with Joy):
+echo   1. Open VS Code 
+echo   2. Ctrl+Shift+P ^> "Tasks: Run Task" 
+echo   3. Select "LiveShare: Join Session"
+echo   4. Experience collaborative kindness!
+echo.
+echo 💡 Tips for Kind Collaboration:
+echo   - Check session status with "LiveShare: Check Session Status"
+echo   - Build C++ with "Build: C++ Debug" or "Build: C++ Release"
+echo   - Monitor logs in %%USERPROFILE%%\LiveShareLogs\
+echo   - Remember: In every interaction, choose kindness
+echo.
+echo 🌟 Your collaborative space is built with:
+echo   - Direct LAN connections (optimized for speed)
+echo   - Real-time network monitoring (optimized for reliability)
+echo   - C++14 development environment (optimized for productivity)
+echo   - Kindness-driven collaboration (optimized for humanity)
+echo.
+echo Press any key to open VS Code and begin your kind collaboration...
+pause >nul
+code .

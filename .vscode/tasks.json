@@ -237,7 +237,7 @@
             "-ShowDetailedMetrics",
             "-PingCount",
             "8"
-        ],
+        },
         "group": "test",
         "presentation": {
             "echo": true,
@@ -1563,6 +1563,19 @@
         "-Action","verify"
       ],
       "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "triad: review latest sovereign log",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "scripts/run_triad_log_review.py",
+        "--input",
+        "logs/sovereign.log"
+      ],
+      "group": "test",
+      "presentation": {"reveal": "always", "panel": "shared"},
       "problemMatcher": []
     }
   ],

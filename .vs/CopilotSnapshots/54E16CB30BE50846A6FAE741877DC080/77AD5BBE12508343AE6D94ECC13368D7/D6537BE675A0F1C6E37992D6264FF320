@@ -1,0 +1,314 @@
+﻿[CmdletBinding()]param(
+  [ValidateSet('DryRun','Execute')] [string]$Mode = 'DryRun',
+  [string]$ConfigPath = 'config/CriticalHarvestConfig.json',
+  [switch]$Verbose,
+  [int]$HashSampleMaxBytes = 0
+)
+
+function Write-Info($m){ Write-Host "[Harvest] $m" -ForegroundColor Cyan }
+function Write-Warn($m){ Write-Host "[Harvest] $m" -ForegroundColor Yellow }
+function Write-Err($m){ Write-Host "[Harvest] $m" -ForegroundColor Red }
+
+$ErrorActionPreference='Stop'
+
+if(-not (Test-Path $ConfigPath)){ Write-Err "Config not found: $ConfigPath"; exit 1 }
+$cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+$targetRoot = $cfg.target_root
+if(-not $targetRoot){ Write-Err "target_root missing in config"; exit 1 }
+
+$includeExt = @($cfg.include_extensions | ForEach-Object { $_.ToLower() })
+$excludeDirs = @($cfg.exclude_dirs)
+$identifierPatterns = @($cfg.identifier_patterns)
+$aiMarkers = @($cfg.ai_markers)
+$maxFileSizeBytes = [long]($cfg.max_file_size_mb * 1MB)
+
+# Hashing config
+$hashCfg = $cfg.hashing
+$hashEnabled = $hashCfg.enabled
+$hashAlgo = if($hashCfg.algorithm){ $hashCfg.algorithm } else { 'SHA256' }
+$dedupeEnabled = $hashCfg.dedupe_enabled
+$alwaysCopyDuplicates = $hashCfg.always_copy_duplicates
+$maxHashSizeBytes = [long]($hashCfg.max_hash_file_size_mb * 1MB)
+
+# Performance config
+$perfCfg = $cfg.copy_performance
+$parallelEnabled = $perfCfg.parallelism_enabled -and ($PSVersionTable.PSVersion.Major -ge 7)
+$maxParallel = if($perfCfg.max_parallel_copies){ [int]$perfCfg.max_parallel_copies } else { 4 }
+$maxMBps = if($perfCfg.max_mb_per_second){ [int]$perfCfg.max_mb_per_second } else { 0 }
+
+function Ensure-Dir($p){ if(-not (Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+function Safe-RelPath($base,$full){ try { return ([IO.Path]::GetRelativePath($base,$full)) } catch { return $full } }
+function Classify-Category($path){
+  $lower = $path.ToLower()
+  foreach($m in $aiMarkers){ if($lower -match [Regex]::Escape($m.ToLower())){ return 'ai_data' } }
+  foreach($id in $identifierPatterns){ if($lower -match [Regex]::Escape($id.ToLower())){ return 'personal' } }
+  if($lower -match 'appdata' -or $lower -match 'programdata'){ return 'apps' }
+  return 'personal'
+}
+function Get-SourceArea($path){
+  $segments = $path -split '[\\/]'
+  foreach($s in @('Desktop','Documents','Downloads','Pictures','Videos','Music','AppData','ProgramData')){ if($segments -contains $s){ return $s } }
+  return 'General'
+}
+function Should-IncludeFile($file){
+  $ext = ($file.Extension).ToLower()
+  if($includeExt -contains $ext){ return $true }
+  $lower = $file.FullName.ToLower()
+  foreach($m in $aiMarkers){ if($lower -match [Regex]::Escape($m.ToLower())){ return $true } }
+  foreach($id in $identifierPatterns){ if($lower -match [Regex]::Escape($id.ToLower())){ return $true } }
+  return $false
+}
+function Is-ExcludedDirName($name){ return $excludeDirs -contains $name }
+
+function Get-FileHash($path){
+  if(-not $hashEnabled){ return $null }
+  try {
+    $fi = Get-Item $path -ErrorAction Stop
+    if($fi.Length -gt $maxHashSizeBytes -and $maxHashSizeBytes -gt 0){ return [pscustomobject]@{ hash=$null; skipped_due_to_size=$true } }
+    $algo = [System.Security.Cryptography.HashAlgorithm]::Create($hashAlgo)
+    $fs = [System.IO.File]::OpenRead($path)
+    try {
+      $h = $algo.ComputeHash($fs)
+      $hex = -join ($h | ForEach-Object { $_.ToString('x2') })
+      return [pscustomobject]@{ hash=$hex; skipped_due_to_size=$false }
+    } finally { $fs.Dispose(); $algo.Dispose() }
+  } catch { Write-Warn "Hash failed: $path :: $_"; return [pscustomobject]@{ hash=$null; skipped_due_to_size=$false; error=$_.Exception.Message } }
+}
+
+# Resume support: load existing manifests/hash index
+$manifestDir = Join-Path $targetRoot 'MANIFESTS'
+$existingCollected=@(); $hashIndex=@{}
+if(Test-Path (Join-Path $manifestDir 'files_collected.json')){
+  try { $existingCollected = Get-Content (Join-Path $manifestDir 'files_collected.json') -Raw | ConvertFrom-Json } catch { Write-Warn "Failed to load existing files_collected.json: $_" }
+}
+if($hashEnabled -and Test-Path (Join-Path $manifestDir 'file_hash_index.json')){
+  try {
+    $rawIndex = Get-Content (Join-Path $manifestDir 'file_hash_index.json') -Raw | ConvertFrom-Json
+    foreach($entry in $rawIndex){ if($entry.hash){ $hashIndex[$entry.hash] = $entry } }
+  } catch { Write-Warn "Failed to load hash index: $_" }
+}
+$processedOriginalPaths = @{}
+foreach($c in $existingCollected){ if($c.original_path){ $processedOriginalPaths[$c.original_path] = $true } }
+
+# DryRun summary with hash metrics
+$drySummary = [ordered]@{ generated_utc=(Get-Date).ToString('o'); total_bytes=0; totals_by_node=@{}; totals_by_category=@{ personal=0; ai_data=0; apps=0 }; file_count=0; max_file_size_mb=$cfg.max_file_size_mb; unique_content_size_bytes=0; duplicate_content_size_bytes=0; hashes_count=0 }
+$seenHashes=@{}
+
+$collected=@(); $appsCollected=@(); $skipped=@(); $errors=@(); $hashEntriesChanged=$false
+$runId = [guid]::NewGuid().ToString()
+$runTimestamp = (Get-Date).ToString('o')
+$copyBytesThisSecond=0; $secondStart=[DateTime]::UtcNow
+
+# Gather candidate files first for optional parallel copy
+$candidateFiles = @()
+foreach($node in $cfg.nodes){
+  if(-not $node.enabled){ continue }
+  $nodeName=$node.name
+  if(-not $drySummary.totals_by_node.ContainsKey($nodeName)){ $drySummary.totals_by_node[$nodeName]=0 }
+  foreach($root in $node.root_paths){
+    if(-not (Test-Path $root)){ Write-Warn "Root path missing ($nodeName): $root"; continue }
+    Write-Info "Enumerating $nodeName root: $root"
+    try {
+      Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+        $f = $_
+        $parentDirs = ($f.DirectoryName -split '[\\/]')
+        if($parentDirs | Where-Object { Is-ExcludedDirName $_ }){ return }
+        if(-not (Should-IncludeFile $f)){ return }
+        $candidateFiles += [pscustomobject]@{ file=$f; node=$nodeName; root=$root }
+      }
+    } catch { $errors += [pscustomobject]@{ node=$nodeName; path=$root; reason='TraversalError'; message=$_.Exception.Message } }
+  }
+}
+
+function Process-File($item){
+  $f=$item.file; $nodeName=$item.node; $root=$item.root
+  $size=$f.Length
+  $category=Classify-Category $f.FullName
+  $drySummary.total_bytes += $size
+  $drySummary.totals_by_node[$nodeName] += $size
+  $drySummary.totals_by_category[$category] += $size
+  $drySummary.file_count++
+
+  $hashInfo=$null
+  if($hashEnabled){ $hashInfo = Get-FileHash $f.FullName; if($hashInfo.hash){
+      $drySummary.hashes_count++
+      if(-not $seenHashes.ContainsKey($hashInfo.hash)){ $drySummary.unique_content_size_bytes += $size; $seenHashes[$hashInfo.hash]=$true } else { $drySummary.duplicate_content_size_bytes += $size }
+    }
+  }
+
+  if($Mode -eq 'DryRun'){ return }
+
+  # Resume: skip if already processed original path recorded with copied flag (either true or false) and destination exists
+  if($processedOriginalPaths.ContainsKey($f.FullName)){
+    return
+  }
+
+  if($size -gt $maxFileSizeBytes){
+    $skipped += [pscustomobject]@{ node=$nodeName; path=$f.FullName; reason='OversizeFile'; size_bytes=$size }
+    return
+  }
+
+  $destCategoryDir = switch($category){ 'ai_data' { 'AI_DATA' } 'apps' { 'APPS' } default { 'USER_DATA' } }
+  $destBase = Join-Path $targetRoot $destCategoryDir
+  $destNodeBase = Join-Path $destBase $nodeName
+  Ensure-Dir $destNodeBase
+  $rel = Safe-RelPath $root $f.FullName
+  $destFull = Join-Path $destNodeBase $rel
+  $destDir = Split-Path $destFull -Parent
+  Ensure-Dir $destDir
+
+  $copied=$false; $duplicateOf=$null
+  if($hashEnabled -and $dedupeEnabled -and $hashInfo -and $hashInfo.hash){
+    if($hashIndex.ContainsKey($hashInfo.hash) -and -not $alwaysCopyDuplicates){
+      # Already have a copy
+      $existingEntry=$hashIndex[$hashInfo.hash]
+      $duplicateOf = ($existingEntry.copies | Select-Object -First 1)
+      # Record original path mapping but do not copy again
+      $existingEntry.copies += $destFull
+      $hashEntriesChanged=$true
+      $collected += [pscustomobject]@{ run_id=$runId; run_timestamp=$runTimestamp; node=$nodeName; original_path=$f.FullName; dest_path=$duplicateOf; size_bytes=$size; category=$category; source_area=(Get-SourceArea $f.FullName); copied=$false; duplicate_of=$duplicateOf; hash=$hashInfo.hash; hash_algorithm=$hashAlgo }
+      return
+    }
+  }
+
+  if(Test-Path $destFull){
+    $destInfo = Get-Item $destFull
+    if($destInfo.Length -eq $size){
+      $collected += [pscustomobject]@{ run_id=$runId; run_timestamp=$runTimestamp; node=$nodeName; original_path=$f.FullName; dest_path=$destFull; size_bytes=$size; category=$category; source_area=(Get-SourceArea $f.FullName); copied=$false; duplicate_of=$null; hash=($hashInfo.hash); hash_algorithm=$hashAlgo }
+      return
+    } else { $destFull = $destFull + '.copy' }
+  }
+
+  try {
+    Copy-Item -LiteralPath $f.FullName -Destination $destFull -Force
+    $copied=$true
+    if($hashEnabled -and $hashInfo -and $hashInfo.hash){
+      if(-not $hashIndex.ContainsKey($hashInfo.hash)){
+        $hashIndex[$hashInfo.hash] = [pscustomobject]@{ hash=$hashInfo.hash; hash_algorithm=$hashAlgo; node=$nodeName; size_bytes=$size; first_seen_timestamp=$runTimestamp; copies=@($destFull); original_full_path=$f.FullName }
+        $hashEntriesChanged=$true
+      } else {
+        $hashIndex[$hashInfo.hash].copies += $destFull; $hashEntriesChanged=$true
+      }
+    }
+    $entry=[pscustomobject]@{ run_id=$runId; run_timestamp=$runTimestamp; node=$nodeName; original_path=$f.FullName; dest_path=$destFull; size_bytes=$size; category=$category; source_area=(Get-SourceArea $f.FullName); copied=$true; duplicate_of=$duplicateOf; hash=($hashInfo.hash); hash_algorithm=$hashAlgo }
+    $collected += $entry
+    if($category -eq 'apps'){ $appsCollected += $entry }
+
+    # Throttling
+    if($maxMBps -gt 0){
+      $copyBytesThisSecond += $size
+      $elapsed = ([DateTime]::UtcNow - $secondStart).TotalSeconds
+      if($elapsed -ge 1){ $copyBytesThisSecond=0; $secondStart=[DateTime]::UtcNow }
+      else {
+        $allowedBytes = $maxMBps * 1MB
+        if($copyBytesThisSecond -gt $allowedBytes){
+          $sleepMs = [int]((($copyBytesThisSecond - $allowedBytes)/$allowedBytes)*1000)
+            if($sleepMs -gt 0){ Start-Sleep -Milliseconds ([Math]::Min($sleepMs,500)) }
+        }
+      }
+    }
+  } catch {
+    $errors += [pscustomobject]@{ node=$nodeName; path=$f.FullName; reason='CopyFailed'; message=$_.Exception.Message }
+  }
+}
+
+# Process files (parallel optional)
+if($Mode -eq 'Execute' -and $parallelEnabled -and $candidateFiles.Count -gt 0){
+  Write-Info "Parallel copy enabled (max=$maxParallel)"
+  $candidateFiles | ForEach-Object -Parallel { Process-File $_ } -ThrottleLimit $maxParallel
+} else {
+  foreach($item in $candidateFiles){ Process-File $item }
+}
+
+if($Mode -eq 'DryRun'){
+  Ensure-Dir $manifestDir
+  $drySummaryJson = $drySummary | ConvertTo-Json -Depth 8
+  Set-Content -Path (Join-Path $manifestDir 'critical_size_estimate.json') -Value $drySummaryJson -Encoding UTF8
+  $csvLines = @('node,bytes')
+  foreach($kv in $drySummary.totals_by_node.GetEnumerator()){ $csvLines += ($kv.Key + ',' + $kv.Value) }
+  $csvLines += 'category,bytes'
+  foreach($kv in $drySummary.totals_by_category.GetEnumerator()){ $csvLines += ($kv.Key + ',' + $kv.Value) }
+  $csvLines += "unique_content_size_bytes,$($drySummary.unique_content_size_bytes)"
+  $csvLines += "duplicate_content_size_bytes,$($drySummary.duplicate_content_size_bytes)"
+  $csvLines += "hashes_count,$($drySummary.hashes_count)"
+  Set-Content -Path (Join-Path $manifestDir 'critical_size_estimate.csv') -Value ($csvLines -join "`n") -Encoding UTF8
+  $totalGB = [math]::Round($drySummary.total_bytes/1GB,2)
+  $personalGB = [math]::Round($drySummary.totals_by_category['personal']/1GB,2)
+  $aiGB = [math]::Round($drySummary.totals_by_category['ai_data']/1GB,2)
+  $appsGB = [math]::Round($drySummary.totals_by_category['apps']/1GB,2)
+  $uniqueGB=[math]::Round($drySummary.unique_content_size_bytes/1GB,2)
+  $dupGB=[math]::Round($drySummary.duplicate_content_size_bytes/1GB,2)
+  Write-Info "DryRun complete. Total=$totalGB GB (Personal $personalGB / AI $aiGB / Apps $appsGB). Unique=$uniqueGB GB Duplicates=$dupGB GB Files=$($drySummary.file_count)"
+  exit 0
+}
+
+# Registry-based app discovery (local machine only)
+function Get-InstalledApps(){
+  $roots=@('HKLM:','HKCU:')
+  $paths=@('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')
+  $apps=@()
+  foreach($r in $roots){ foreach($p in $paths){ $full=Join-Path $r $p; try { if(Test-Path $full){ Get-ChildItem $full | ForEach-Object { try { $props=Get-ItemProperty $_.PsPath; if($props.DisplayName){ $apps += [pscustomobject]@{ app_name=$props.DisplayName; display_version=$props.DisplayVersion; publisher=$props.Publisher; install_location=$props.InstallLocation; uninstall_string=$props.UninstallString } } } catch {} } } } catch {} } }
+  return $apps | Sort-Object app_name -Unique
+}
+$oemPub = @($cfg.oem_publishers | ForEach-Object { $_.ToLower() })
+$installedApps = Get-InstalledApps | ForEach-Object {
+  $isOEM = ($_.publisher -and ($oemPub -contains $_.publisher.ToLower()))
+  $_ | Add-Member -NotePropertyName is_oem -NotePropertyValue $isOEM -PassThru
+}
+$installedAppsManifest=@()
+foreach($app in $installedApps){
+  $copied=$false; $configPaths=@(); $approxSize=0
+  if(-not $app.is_oem -and $app.install_location -and (Test-Path $app.install_location)){
+    try {
+      $safeName = ($app.app_name -replace '[^A-Za-z0-9_-]','_')
+      $destAppRoot = Join-Path $targetRoot "APPS" | Join-Path -ChildPath $safeName
+      Ensure-Dir $destAppRoot
+      # Copy install folder if under oversize threshold
+      $folderSize = (Get-ChildItem -Path $app.install_location -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
+      if($folderSize -le ($cfg.oversize_app_folder_mb * 1MB)){
+        Copy-Item -Path $app.install_location -Destination (Join-Path $destAppRoot 'install') -Recurse -Force -ErrorAction SilentlyContinue
+        $approxSize += $folderSize; $copied=$true
+      }
+      # Discover config paths by name
+      $userRoot = [Environment]::GetFolderPath('UserProfile')
+      $appDataRoam = Join-Path $userRoot 'AppData\Roaming'
+      $appDataLocal = Join-Path $userRoot 'AppData\Local'
+      $programData = 'C:\ProgramData'
+      foreach($base in @($appDataRoam,$appDataLocal,$programData)){
+        if(Test-Path $base){
+          Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$($safeName)*" -or $_.Name -like "*$($app.app_name.Split()[0])*" } | ForEach-Object {
+            $cfgFolder=$_.FullName
+            $configPaths += $cfgFolder
+            $cfgSize = (Get-ChildItem -Path $cfgFolder -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
+            $approxSize += $cfgSize
+            $destCfg = Join-Path $destAppRoot ('config_' + $_.Name)
+            Copy-Item -Path $cfgFolder -Destination $destCfg -Recurse -Force -ErrorAction SilentlyContinue
+          }
+        }
+      }
+    } catch { Write-Warn "App copy failed: $($app.app_name) :: $_" }
+  }
+  $installedAppsManifest += [pscustomobject]@{ app_name=$app.app_name; publisher=$app.publisher; display_version=$app.display_version; install_location=$app.install_location; is_oem=$app.is_oem; copied=$copied; config_paths_copied=$configPaths; approx_total_size_copied_bytes=$approxSize }
+}
+
+# Persist manifests safely (temp + move)
+function Write-SafeJson($obj,$path){ $tmp=$path + '.tmp'; $obj | ConvertTo-Json -Depth 10 | Set-Content -Path $tmp -Encoding UTF8; Move-Item -Path $tmp -Destination $path -Force }
+function Write-Csv($items,$path){ if(-not $items){ return }; $props = $items[0].PSObject.Properties.Name; $lines = @($props -join ','); foreach($it in $items){ $vals=@(); foreach($p in $props){ $v=$it.$p; if($v -is [System.Collections.IEnumerable] -and -not ($v -is [string])){ $v = ($v -join '|') }; if($v -is [string]){ $vals += '"' + ($v.Replace('"','''')) + '"' } else { $vals += $v } }; $lines += ($vals -join ',') }; Set-Content -Path $path -Value ($lines -join "`n") -Encoding UTF8 }
+
+Ensure-Dir $manifestDir
+Write-SafeJson $collected (Join-Path $manifestDir 'files_collected.json')
+Write-SafeJson $appsCollected (Join-Path $manifestDir 'apps_collected.json')
+Write-SafeJson ($skipped + $errors) (Join-Path $manifestDir 'errors_and_skipped.json')
+Write-Csv $collected (Join-Path $manifestDir 'files_collected.csv')
+Write-Csv $appsCollected (Join-Path $manifestDir 'apps_collected.csv')
+Write-Csv ($skipped + $errors) (Join-Path $manifestDir 'errors_and_skipped.csv')
+Write-SafeJson $installedAppsManifest (Join-Path $manifestDir 'installed_apps.json')
+Write-Csv $installedAppsManifest (Join-Path $manifestDir 'installed_apps.csv')
+
+if($hashEnabled){
+  $hashIndexList = $hashIndex.GetEnumerator() | ForEach-Object { $_.Value }
+  Write-SafeJson $hashIndexList (Join-Path $manifestDir 'file_hash_index.json')
+  Write-Csv $hashIndexList (Join-Path $manifestDir 'file_hash_index.csv')
+}
+
+Write-Info "Execute complete. Collected=$($collected.Count) AppsFolders=$($appsCollected.Count) InstalledApps=$($installedAppsManifest.Count) Skipped=$($skipped.Count) Errors=$($errors.Count) Dedupe=$dedupeEnabled Hashes=$($hashIndex.Count)"

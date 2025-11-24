@@ -1,0 +1,84 @@
+﻿from __future__ import annotations
+import ast
+from dataclasses import dataclass
+from typing import List, Tuple
+
+FORBIDDEN_PHRASES = [
+    "must",
+    "should",
+    "you have to",
+    "urgent",
+    "forced introspection",
+    "diagnose",
+    "diagnosis",
+    "infer identity",
+]
+
+DANGEROUS_CALLS = {
+    ("os", "remove"),
+    ("shutil", "rmtree"),
+    ("subprocess", "Popen"),
+    ("subprocess", "call"),
+    ("subprocess", "run"),
+}
+
+
+@dataclass
+class DiffViolation:
+    rule: str
+    detail: str
+    location: str | None = None
+
+
+def _extract_string_literals(tree: ast.AST) -> List[str]:
+    values: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            values.append(node.value)
+        elif isinstance(node, ast.JoinedStr):
+            # f-strings: join all string parts
+            for v in node.values:
+                if isinstance(v, ast.Str):
+                    values.append(v.s)
+    return values
+
+
+def _extract_calls(tree: ast.AST) -> List[Tuple[str | None, str]]:
+    calls: List[Tuple[str | None, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                mod = None
+                if isinstance(node.func.value, ast.Name):
+                    mod = node.func.value.id
+                calls.append((mod, node.func.attr))
+            elif isinstance(node.func, ast.Name):
+                calls.append((None, node.func.id))
+    return calls
+
+
+def analyze_new_source(new_source: str) -> List[DiffViolation]:
+    """
+    Analyze a single source (no old source needed) for unsafe additions.
+    Used for MCP proposals before applying them.
+    """
+    violations: List[DiffViolation] = []
+    try:
+        tree = ast.parse(new_source)
+    except SyntaxError as e:
+        violations.append(DiffViolation("syntax_error", f"{e}"))
+        return violations
+
+    # Phrase checks (case-insensitive)
+    text_lower = new_source.lower()
+    for p in FORBIDDEN_PHRASES:
+        if p in text_lower:
+            violations.append(DiffViolation("coercive_or_sensitive_phrase", p))
+
+    # Dangerous calls
+    calls = _extract_calls(tree)
+    for mod, name in calls:
+        if mod and (mod, name) in DANGEROUS_CALLS:
+            violations.append(DiffViolation("dangerous_call", f"{mod}.{name}"))
+
+    return violations

@@ -1,0 +1,54 @@
+param(
+  [switch]$WhatIf,
+  [switch]$VerifyOnly,
+  [string]$SourceLedger,
+  [string]$TargetLedger
+)
+$ErrorActionPreference='Stop'
+# Auto-detect source ledger if not provided
+if(-not $SourceLedger){
+  # Try config file
+  $cfgPath = 'config/recorder_config.yaml'
+  if(Test-Path $cfgPath){
+    $line = (Get-Content $cfgPath | Select-String -Pattern 'ledger_path:' | Select-Object -First 1)
+    if($line){ $possibleCfg = ($line.ToString() -replace 'ledger_path:\s*','').Trim() }
+  }
+  $candidates = @()
+  if($possibleCfg -and (Test-Path $possibleCfg)){ $candidates += $possibleCfg }
+  $candidates += 'data/ledger/events.jsonl'
+  # Fallback discovery of any jsonl file with "audit" or "events"
+  $disc = Get-ChildItem -Recurse -Filter *.jsonl -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'events|audit' } | Select-Object -ExpandProperty FullName
+  if($disc){ $candidates += $disc }
+  $SourceLedger = ($candidates | Where-Object { Test-Path $_ } | Select-Object -First 1)
+}
+if(-not $SourceLedger){ throw 'Unable to locate source ledger (events.jsonl). Provide -SourceLedger explicitly.' }
+if(-not (Test-Path $SourceLedger)){ throw "Source ledger missing: $SourceLedger" }
+
+# Target path
+if(-not $TargetLedger){ $TargetLedger = 'data/v2/ledger/events.jsonl' }
+$targetDir = Split-Path $TargetLedger -Parent
+if(-not (Test-Path $targetDir) -and -not $WhatIf -and -not $VerifyOnly){ New-Item -ItemType Directory -Force -Path $targetDir | Out-Null }
+
+# Load v1 lines (jsonl assumed one JSON per line)
+$v1events = Get-Content -LiteralPath $SourceLedger | ForEach-Object { if($_){ try { $_ | ConvertFrom-Json } catch { Write-Warning "Bad JSON line skipped" } } }
+Write-Host "Migrating $($v1events.Count) events -> $TargetLedger" -ForegroundColor Cyan
+
+$written=0
+foreach($e in $v1events){
+  $v2event = [pscustomobject]@{
+    id=$e.id
+    timestamp=$e.timestamp
+    type=$e.type
+    payload=$e.payload
+    hash=$e.hash
+    provenance="v1-migration:$($e.id)"
+    compression_flag=$false
+    schema_version='2.0'
+    migrated_at=(Get-Date).ToUniversalTime().ToString('o')
+  }
+  $line = $v2event | ConvertTo-Json -Compress
+  if($WhatIf){ Write-Host $line } elseif(-not $VerifyOnly){ Add-Content -LiteralPath $TargetLedger -Value $line; $written++ }
+}
+if($WhatIf){ Write-Host 'DRY-RUN complete — no files written' -ForegroundColor Yellow }
+elseif($VerifyOnly){ Write-Host 'Verification pass complete (no writes).' -ForegroundColor Yellow }
+else { Write-Host "Migration complete -> $TargetLedger (lines written: $written)" -ForegroundColor Green }

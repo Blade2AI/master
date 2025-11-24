@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/event_manifest.json",
+  "title": "File Manifest Event",
+  "type": "object",
+  "required": ["event_type", "timestamp", "files", "root_sha256", "version"],
+  "properties": {
+    "event_type": {"const": "manifest"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "root_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "version": {"type": "string"}
+  }
+}

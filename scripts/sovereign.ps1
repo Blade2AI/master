@@ -30,12 +30,20 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("setup", "security", "transport", "audit", "governance", "full", "verify", "compliance")]
+    [ValidateSet("setup", "security", "transport", "audit", "governance", "full", "verify", "compliance", "truthtest", "workerimpact")]
     [string]$Action = "verify",
     
     [switch]$SkipTransport,
     [switch]$AutoApprove,
-    [switch]$Verbose
+    [switch]$Verbose,
+
+    # Additional parameters for extended actions
+    [string]$MetricCategory,
+    [datetime]$StartDate,
+    [datetime]$EndDate,
+
+    [string]$WorkerID,
+    [string]$Station
 )
 
 $ErrorActionPreference = "Stop"
@@ -276,6 +284,24 @@ function Test-MessageSignature {
         Write-Warning "Signature verification failed: $_"
         return $false
     }
+}
+
+# Import extension modules (stubs / helpers) if present; ignore if not
+try {
+    $modBase = Join-Path $PSScriptRoot 'scripts'
+    $paths = @(
+        Join-Path $modBase 'Core-Sovereign-Data.psm1',
+        Join-Path $modBase 'Truth-Test.psm1',
+        Join-Path $modBase 'Worker-Impact-Dashboard.psm1',
+        Join-Path $modBase 'Worker-Impact-Helpers.psm1'
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            Import-Module $p -Force -ErrorAction SilentlyContinue
+        }
+    }
+} catch {
+    Write-StepWarning "Failed to import extension modules: $_"
 }
 
 # ???????????????????????????????????????????????????????????????????????????
@@ -554,6 +580,49 @@ switch ($Action) {
             Write-StepSuccess "Security log: OK"
         } else {
             Write-StepWarning "Security log not found."
+        }
+    }
+    'compliance' {
+        Invoke-ComplianceAction
+        return
+    }
+
+    'truthtest' {
+        Write-LayerHeader "TRUTH TEST" "Watermelon metric detection and constitutional escalation"
+
+        if (-not $MetricCategory) { $MetricCategory = "Financial" }
+        if (-not $StartDate)      { $StartDate = (Get-Date).AddMonths(-3) }
+        if (-not $EndDate)        { $EndDate   = Get-Date }
+
+        if (Get-Command -Name Invoke-TruthTest -ErrorAction SilentlyContinue) {
+            try {
+                $report = Invoke-TruthTest -MetricCategory $MetricCategory -StartDate $StartDate -EndDate $EndDate
+                Write-Host "Truth Test Status: $($report.Status)" -ForegroundColor White
+                Write-Host "Constitutional Action: $($report.ConstitutionalAction)" -ForegroundColor White
+            } catch {
+                Write-StepError "Invoke-TruthTest failed: $_"
+            }
+        } else {
+            Write-StepError "Invoke-TruthTest not available. Ensure Truth-Test.psm1 is present."
+        }
+    }
+
+    'workerimpact' {
+        Write-LayerHeader "WORKER IMPACT" "Real-time impact visibility for a single worker"
+
+        if (-not $WorkerID) {
+            Write-StepError "WorkerID is required for -Action workerimpact"
+            break
+        }
+
+        if (Get-Command -Name Show-WorkerImpactDashboard -ErrorAction SilentlyContinue) {
+            try {
+                Show-WorkerImpactDashboard -WorkerID $WorkerID -Station $Station
+            } catch {
+                Write-StepError "Show-WorkerImpactDashboard failed: $_"
+            }
+        } else {
+            Write-StepError "Show-WorkerImpactDashboard not available. Ensure Worker-Impact-Dashboard.psm1 is present."
         }
     }
     'compliance' {

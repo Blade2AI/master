@@ -1,0 +1,33 @@
+﻿param(
+  [switch]$WhatIf,
+  [switch]$VerifyOnly
+)
+$ErrorActionPreference='Stop'
+$v1 = 'data/ledger/events.jsonl'
+$v2 = 'data/v2/ledger/events.jsonl'
+if(-not (Test-Path $v1)){ throw "v1 ledger missing: $v1" }
+if(-not (Test-Path (Split-Path $v2 -Parent))){ if(-not $WhatIf){ New-Item -ItemType Directory -Force -Path (Split-Path $v2 -Parent) | Out-Null } }
+
+# Load v1 lines (jsonl assumed: one JSON per line)
+$v1events = Get-Content -LiteralPath $v1 | ForEach-Object { if($_){ try { $_ | ConvertFrom-Json } catch { Write-Warning "Bad JSON line skipped" } } }
+Write-Host "Migrating $($v1events.Count) v1 events -> v2" -ForegroundColor Cyan
+
+$written=0
+foreach($e in $v1events){
+  $v2event = [pscustomobject]@{
+    id=$e.id
+    timestamp=$e.timestamp
+    type=$e.type
+    payload=$e.payload
+    hash=$e.hash
+    provenance="v1-migration:$($e.id)"
+    compression_flag=$false
+    schema_version='2.0'
+    migrated_at=(Get-Date).ToUniversalTime().ToString('o')
+  }
+  $line = $v2event | ConvertTo-Json -Compress
+  if($WhatIf){ Write-Host $line } elseif(-not $VerifyOnly){ Add-Content -LiteralPath $v2 -Value $line; $written++ }
+}
+if($WhatIf){ Write-Host 'DRY-RUN complete — no files written' -ForegroundColor Yellow }
+elseif($VerifyOnly){ Write-Host 'Verification pass complete (no writes).' -ForegroundColor Yellow }
+else { Write-Host "Migration complete -> $v2 (lines written: $written)" -ForegroundColor Green }

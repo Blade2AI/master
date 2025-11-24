@@ -1,0 +1,57 @@
+name: Sovereign Compliance Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  compliance-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup PowerShell
+        uses: PowerShell/actions-setup@v2
+        with:
+          pwsh: '7.3.0'
+
+      - name: Build & Verify
+        run: pwsh -File scripts/BuildAndTest.ps1
+
+      - name: Run Tamper Evidence Demo
+        run: pwsh -File scripts/TamperEvidenceDemo.ps1
+
+      - name: Run Verification Harness
+        run: pwsh -File scripts/VerificationHarness.ps1 -Verbose
+
+      - name: Archive Compliance & Tamper Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-logs
+          path: |
+            logs/tamper/*.json
+            logs/compliance/*.json
+
+      - name: Static Analysis
+        run: bash scripts/run-static-analysis.sh || true
+
+      - name: Upload Static Analysis Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cppcheck-report
+          path: build/cppcheck_report.xml
+
+      - name: Merkle Regression Artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: merkle-regression
+          path: logs/compliance/merkle_regression_event.json
+          if-no-files-found: ignore

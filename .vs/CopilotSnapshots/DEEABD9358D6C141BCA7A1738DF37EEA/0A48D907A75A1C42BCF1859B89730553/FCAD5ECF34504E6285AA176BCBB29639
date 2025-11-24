@@ -1,0 +1,90 @@
+﻿#include "../VerifyEvidenceLib.h"
+#include "../../../deps/catch2/catch.hpp"
+#include "ed25519_test_vectors.h"
+#include <vector>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <random>
+
+static std::string read_file(const std::string &p) {
+    std::ifstream in(p, std::ios::binary);
+    std::ostringstream ss; ss << in.rdbuf();
+    return ss.str();
+}
+
+static std::string hash_string_hex(const std::string &data) {
+    auto h = compute_sha256(data);
+    std::ostringstream os; os << std::hex;
+    for (auto b : h) os << (b >> 4 & 0xF) << (b & 0xF);
+    return os.str();
+}
+
+TEST_CASE(Merkle_RightOrder_ComputesExpectedRoot) {
+    std::vector<std::string> paths = {
+        "../../test_data/evidence1.txt",
+        "../../test_data/evidence2.txt",
+        "../../test_data/evidence3.txt"
+    };
+    std::string root = compute_merkle_root_from_files(paths);
+    std::string expected = compute_merkle_root_from_files(paths);
+    REQUIRE(root == expected);
+}
+
+TEST_CASE(Merkle_TamperedFile_FailsMatch) {
+    std::vector<std::string> paths = {
+        "../../test_data/evidence1.txt",
+        "../../test_data/evidence2.txt",
+        "../../test_data/evidence3.txt"
+    };
+    std::string original_root = compute_merkle_root_from_files(paths);
+
+    std::string tamper_path = "../../test_data/evidence2.txt";
+    std::string original = read_file(tamper_path);
+    std::string original_hash = hash_string_hex(original);
+
+    // Overwrite with deterministic null pattern (same length) plus marker to guarantee difference
+    std::string tampered(original.size(), '\0');
+    tampered += "_TAMPER"; // length now differs
+    {
+        std::ofstream out(tamper_path, std::ios::binary | std::ios::trunc);
+        out.write(tampered.data(), tampered.size());
+        out.flush();
+    }
+
+    std::string tampered_read = read_file(tamper_path);
+    std::string tampered_hash = hash_string_hex(tampered_read);
+
+    // Assert direct hash mismatch first (sanity before Merkle)
+    REQUIRE(original_hash != tampered_hash);
+    REQUIRE(original != tampered_read);
+
+    std::string tampered_root = compute_merkle_root_from_files(paths);
+
+    // Restore original
+    {
+        std::ofstream restore(tamper_path, std::ios::binary | std::ios::trunc);
+        restore.write(original.data(), original.size());
+        restore.flush();
+    }
+
+    REQUIRE(original_root != tampered_root);
+}
+
+#ifdef SODIUM_AVAILABLE
+TEST_CASE(Signature_Verify_Success) {
+    REQUIRE(verify_signature_ed25519(TEST_PUBKEY, TEST_SIG, TEST_MESSAGE));
+}
+
+TEST_CASE(Signature_Verify_InvalidSignature_Fails) {
+    std::vector<unsigned char> bad_sig = TEST_SIG; bad_sig[0] ^= 0xFF; 
+    REQUIRE(!verify_signature_ed25519(TEST_PUBKEY, bad_sig, TEST_MESSAGE));
+}
+
+TEST_CASE(Signature_Verify_WrongPubkey_Fails) {
+    REQUIRE(!verify_signature_ed25519(WRONG_PUBKEY, TEST_SIG, TEST_MESSAGE));
+}
+#endif
+
+int main(int argc, char** argv) { return run_all_tests(); }

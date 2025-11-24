@@ -1,0 +1,74 @@
+name: Anchor Dry-Run Validation
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'scripts/Seal-And-Anchor-Dual.ps1'
+      - 'scripts/Perform-NetworkAnchoring.ps1'
+      - 'scripts/sign_anchor.py'
+      - 'scripts/Invoke-ArweaveAnchor.ps1'
+      - 'scripts/Invoke-IpfsUpload.ps1'
+      - 'tests/test_anchor_gdpr_guard.py'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'scripts/Seal-And-Anchor-Dual.ps1'
+      - 'scripts/Perform-NetworkAnchoring.ps1'
+      - 'scripts/sign_anchor.py'
+      - 'scripts/Invoke-ArweaveAnchor.ps1'
+      - 'scripts/Invoke-IpfsUpload.ps1'
+      - 'tests/test_anchor_gdpr_guard.py'
+
+jobs:
+  anchor-dryrun:
+    runs-on: ubuntu-latest
+    env:
+      ANCHOR_ENV: ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          else
+            python -m pip install jsonschema
+          fi
+          python -m pip install pytest
+
+      - name: Run GDPR guard unit test
+        run: pytest -q tests/test_anchor_gdpr_guard.py || exit 1
+
+      - name: Create stub ledger
+        run: |
+          mkdir -p ledger
+          echo '{"events":[],"snapshot_version":"ci"}' > ledger/sovereign_ledger.json
+
+      - name: Dry-run seal + anchor
+        shell: pwsh
+        run: |
+          pwsh -File scripts/Seal-And-Anchor-Dual.ps1 -LedgerPath ledger/sovereign_ledger.json -DryRun
+          echo 'Listing out/anchors:'
+          Get-ChildItem out/anchors -ErrorAction SilentlyContinue
+
+      - name: Validate signature receipt exists
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem out/anchors -Filter 'event_anchor_*.json' -ErrorAction SilentlyContinue
+          if(-not $files){ Write-Host 'No anchor manifest found.'; exit 1 }
+          foreach($f in $files){
+            $sig = [System.IO.Path]::ChangeExtension($f.FullName,'.sig.json')
+            if(-not (Test-Path $sig)){ Write-Host "Missing signature receipt for $($f.Name)"; exit 1 }
+          }
+          Write-Host 'All anchor manifests have signature receipts.'
+
+      - name: Summary
+        run: echo 'Anchor dry-run gate passed.'

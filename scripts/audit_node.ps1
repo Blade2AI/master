@@ -1,7 +1,9 @@
 param(
   [string]$OutRoot = "$env:USERPROFILE\Documents\Sovereign\NodeAudit",
   [string[]]$ScanRoots = @($env:USERPROFILE, "$env:USERPROFILE\source\repos", "C:\source", "C:\repos"),
+  [switch]$ScanAllDrives,                # If set, include all fixed drive roots automatically
   [int]$MaxFiles = 500000,
+  [switch]$IncludeAllExtensions,         # If set, index ALL files (still bounded by MaxFiles)
   [string[]]$IndexExtensions = @(
     '.sln','.csproj','.vbproj','.vcxproj','.props','.targets',
     '.py','.ps1','.sh','.bat','.cmd','.psm1','.psd1',
@@ -10,7 +12,10 @@ param(
     '.md','.txt','.rst','.adoc',
     '.dockerfile','.docker','.compose','.env',
     '.gguf','.onnx','.pth','.ckpt','.safetensors','.bin'
-  )
+  ),
+  [int]$LargeModelMinMB = 100,           # Threshold for scanning large model artifacts in generic roots
+  [string[]]$ExtraModelPaths = @(),       # Optional additional model directories
+  [switch]$HashModels                    # Compute SHA256 for model files (slower)
 )
 
 $ErrorActionPreference = 'Continue'
@@ -20,6 +25,7 @@ function NowStamp(){ (Get-Date).ToString('yyyyMMdd_HHmmss') }
 function Safe-GetSize([string]$p){ try { (Get-Item -LiteralPath $p -ErrorAction Stop).Length } catch { 0 } }
 function Safe-GetMTime([string]$p){ try { (Get-Item -LiteralPath $p -ErrorAction Stop).LastWriteTimeUtc.ToString('o') } catch { $null } }
 function Write-CsvUtf8([object[]]$rows,[string]$path){ $rows | Export-Csv -NoTypeInformation -Encoding UTF8 -LiteralPath $path }
+function Hash-SHA256([string]$p){ if(-not $HashModels){ return '' }; try { (Get-FileHash -Algorithm SHA256 -LiteralPath $p -ErrorAction Stop).Hash } catch { '' } }
 
 # Prepare output folder
 $stamp = NowStamp()
@@ -27,18 +33,25 @@ $node = $env:COMPUTERNAME
 $OutDir = Join-Path $OutRoot ("_AUDIT_RESULTS_{0}_{1}" -f $node,$stamp)
 Ensure-Dir $OutDir
 
-Write-Host "Sovereign Node Auditor: $node" -ForegroundColor Cyan
-Write-Host "Output: $OutDir"
+Write-Host "Sovereign Node Auditor (Enhanced): $node" -ForegroundColor Cyan
+Write-Host "Output: $OutDir" -ForegroundColor Gray
+
+# Auto add all fixed drives if requested
+if($ScanAllDrives){
+  $fixed = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -match '^[A-Z]:\\$' } | ForEach-Object { $_.Root }
+  foreach($d in $fixed){ if(-not ($ScanRoots -contains $d)){ $ScanRoots += $d } }
+}
 
 # Normalize scan roots
 $roots = @()
 foreach($r in $ScanRoots){ if($r -and (Test-Path $r)){ $roots += (Resolve-Path $r).Path } }
 if($roots.Count -eq 0){ $roots = @($env:USERPROFILE) }
 
-# 1) Git Forensics (.git roots)
+# ================== 1) Git Forensics (.git roots) ==================
 $gitRows = New-Object System.Collections.Generic.List[object]
+$gitSimple = New-Object System.Collections.Generic.List[object]
 foreach($root in $roots){
-  Write-Host "Scanning for .git under $root ..."
+  Write-Host "Scanning for .git under $root ..." -ForegroundColor DarkGray
   try {
     Get-ChildItem -LiteralPath $root -Directory -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq '.git' } | ForEach-Object {
       $gitDir = $_.FullName
@@ -69,47 +82,51 @@ foreach($root in $roots){
         Dirty        = $dirty
         LastWriteUtc = (Get-Item -LiteralPath $repo -ErrorAction SilentlyContinue).LastWriteTimeUtc.ToString('o')
       })
+      $gitSimple.Add([pscustomobject]@{ Computer=$node; RepoPath=$repo })
     }
   } catch {}
 }
 
-# 2) AI Model Inventory (LM Studio, Ollama, GGUF)
+# ================== 2) AI Model Inventory (LM Studio, Ollama, GGUF) ==================
 $models = New-Object System.Collections.Generic.List[object]
-# LM Studio common paths
+# LM Studio common + user path
 $lmPaths = @(
   "$env:LOCALAPPDATA\LM Studio\cache\models",
   "$env:APPDATA\LM Studio\models",
-  "$env:USERPROFILE\AppData\Local\Programs\LM Studio\models"
-) | Where-Object { $_ -and (Test-Path $_) }
+  "$env:USERPROFILE\AppData\Local\Programs\LM Studio\models",
+  "$env:USERPROFILE\.lmstudio\models"   # Added per comprehensive requirement
+) + $ExtraModelPaths | Where-Object { $_ -and (Test-Path $_) }
 foreach($p in $lmPaths){
+  Write-Host "Indexing LM Studio path: $p" -ForegroundColor DarkGray
   Get-ChildItem -Path $p -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
     if($_.Extension -in @('.gguf','.bin','.safetensors','.pth','.onnx')){
       $models.Add([pscustomobject]@{
-        Computer=$node; Type='LMStudio'; Name=$_.Name; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o'); Extra=''
+        Computer=$node; Type='LMStudio'; Name=$_.Name; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o'); Hash=Hash-SHA256 $_.FullName; Source=$p
       })
     }
   }
 }
-# Ollama models
+# Ollama models directory
 $ollamaDir = Join-Path $env:USERPROFILE '.ollama\models'
 if(Test-Path $ollamaDir){
+  Write-Host "Indexing Ollama models: $ollamaDir" -ForegroundColor DarkGray
   Get-ChildItem -Path $ollamaDir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
     $models.Add([pscustomobject]@{
-      Computer=$node; Type='Ollama'; Name=$_.Name; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o'); Extra=''
+      Computer=$node; Type='Ollama'; Name=$_.Name; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o'); Hash=Hash-SHA256 $_.FullName; Source=$ollamaDir
     })
   }
 }
-# GGUF anywhere under scan roots (bounded)
+# Large model artifacts anywhere (GGUF / others) under scan roots
 foreach($root in $roots){
   try {
-    Get-ChildItem -Path $root -Recurse -File -Include *.gguf -ErrorAction SilentlyContinue | Select-Object -First 500 | ForEach-Object {
+    Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -ge ($LargeModelMinMB * 1MB) -and ($_.Extension -in @('.gguf','.bin','.safetensors','.pth','.onnx','.ckpt')) } | Select-Object -First 2000 | ForEach-Object {
       $models.Add([pscustomobject]@{
-        Computer=$node; Type='GGUF'; Name=$_.Name; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o'); Extra=''
+        Computer=$node; Type='LargeModel'; Name=$_.Name; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o'); Hash=Hash-SHA256 $_.FullName; Source=$root
       })
     }
   } catch {}
 }
-# Ollama list (if available)
+# Ollama list (registry) if available
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
 if($ollama){
   try {
@@ -118,13 +135,13 @@ if($ollama){
       $lines = $list -split "`n" | Where-Object { $_ -and -not $_.StartsWith('NAME') }
       foreach($ln in $lines){
         $name = ($ln -split '\s+')[0]
-        $models.Add([pscustomobject]@{ Computer=$node; Type='OllamaList'; Name=$name; Path='(registry)'; SizeBytes=0; ModifiedUtc=''; Extra='' })
+        $models.Add([pscustomobject]@{ Computer=$node; Type='OllamaRegistry'; Name=$name; Path='(registry)'; SizeBytes=0; ModifiedUtc=''; Hash=''; Source='ollama list' })
       }
     }
   } catch {}
 }
 
-# 3) Workspace Audit (.sln / .code-workspace)
+# ================== 3) Workspace Audit (.sln / .code-workspace) ==================
 $workspaces = New-Object System.Collections.Generic.List[object]
 foreach($root in $roots){
   try {
@@ -136,17 +153,18 @@ foreach($root in $roots){
   } catch {}
 }
 
-# 4) File Index (bounded by MaxFiles and IndexExtensions)
+# ================== 4) File Index ==================
 $fileIndex = New-Object System.Collections.Generic.List[object]
 $extSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $IndexExtensions | ForEach-Object { [void]$extSet.Add($_) }
 $added = 0
 foreach($root in $roots){
+  Write-Host "Indexing files under $root ..." -ForegroundColor DarkGray
   try {
     Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
       if($added -ge $MaxFiles){ return }
       $ext = $_.Extension
-      if([string]::IsNullOrEmpty($ext) -or $extSet.Contains($ext)){
+      if($IncludeAllExtensions -or [string]::IsNullOrEmpty($ext) -or $extSet.Contains($ext)){
         $fileIndex.Add([pscustomobject]@{
           Computer=$node; Path=$_.FullName; SizeBytes=$_.Length; ModifiedUtc=$_.LastWriteTimeUtc.ToString('o')
         })
@@ -156,20 +174,31 @@ foreach($root in $roots){
   } catch {}
 }
 
-# Write outputs
+# ================== OUTPUTS ==================
 $deepForgeCsv = Join-Path $OutDir ("{0}_DEEP_FORGE.csv" -f $node)
 $aiModelsCsv  = Join-Path $OutDir ("{0}_AI_MODELS.csv"  -f $node)
 $gitCsv       = Join-Path $OutDir ("{0}_GIT_FORENSICS.csv" -f $node)
+$gitSimpleCsv = Join-Path $OutDir ("{0}_GIT_REPOS.csv" -f $node)          # Added simple repo list
 $wsCsv        = Join-Path $OutDir ("{0}_WORKSPACES.csv" -f $node)
+$vsStdCsv     = Join-Path $OutDir ("{0}_VS_WORKSPACES.csv" -f $node)      # Standardized naming for consolidation scripts
 
 Write-CsvUtf8 $fileIndex $deepForgeCsv
 Write-CsvUtf8 $models    $aiModelsCsv
 Write-CsvUtf8 $gitRows   $gitCsv
+Write-CsvUtf8 $gitSimple $gitSimpleCsv
 Write-CsvUtf8 $workspaces $wsCsv
+Write-CsvUtf8 $workspaces $vsStdCsv
 
 Write-Host "Wrote:" -ForegroundColor Green
 Write-Host "  $deepForgeCsv" -ForegroundColor Green
 Write-Host "  $aiModelsCsv"  -ForegroundColor Green
 Write-Host "  $gitCsv"       -ForegroundColor Green
+Write-Host "  $gitSimpleCsv" -ForegroundColor Green
 Write-Host "  $wsCsv"        -ForegroundColor Green
+Write-Host "  $vsStdCsv"     -ForegroundColor Green
+
+Write-Host "Indexed Files: $($fileIndex.Count) (MaxFiles=$MaxFiles, AllExt=$IncludeAllExtensions)" -ForegroundColor Gray
+Write-Host "Models Indexed: $($models.Count) (Hashing=$HashModels)" -ForegroundColor Gray
+Write-Host "Git Repositories: $($gitRows.Count)" -ForegroundColor Gray
+Write-Host "Workspaces: $($workspaces.Count)" -ForegroundColor Gray
 

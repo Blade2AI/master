@@ -1,0 +1,105 @@
+﻿param(
+  [string[]]$Hosts,
+  [ValidateSet('deploy','run','sync','ps','ollama','vs-build','vs-deploy')]$Type='run',
+  [string]$QueueRoot = "\\dxp4800plus-67ba\ops\Queue",
+  [string]$Package = '',
+  [string]$Dest = 'C:\\ops',
+  [string]$Script = '',
+  [string[]]$Args,
+  [string]$Code,
+  [string]$Prompt,
+  [string]$Model = 'llama3.2:3b',
+  [string]$Output = '',
+  [string]$SolutionPath = '',
+  [string]$Configuration = 'Release',
+  [string]$Platform = 'Any CPU'
+)
+
+if (-not $Hosts -or $Hosts.Count -eq 0) { throw 'Specify -Hosts list' }
+
+# Auto-switch logic
+if ($Code) { $Type = 'ps' }
+if ($Prompt) { $Type = 'ollama' }
+if ($SolutionPath) { $Type = 'vs-build' }
+
+$cmd = [ordered]@{ 
+  id = [guid]::NewGuid().ToString()
+  type = $Type
+  timestamp = (Get-Date).ToString('o')
+  queued_by = $env:USERNAME
+  queued_from = $env:COMPUTERNAME
+}
+
+switch ($Type) {
+  'deploy' { 
+    $cmd.package = $Package
+    $cmd.dest = $Dest 
+  }
+  'sync' { 
+    $cmd.source = $Package
+    $cmd.dest = $Dest 
+  }
+  'ps' { 
+    $cmd.code = $Code 
+  }
+  'ollama' {
+    $cmd.prompt = $Prompt
+    $cmd.model = $Model
+    if ($Output) { $cmd.output = $Output }
+  }
+  'vs-build' {
+    $cmd.solution_path = $SolutionPath
+    $cmd.configuration = $Configuration
+    $cmd.platform = $Platform
+    $cmd.output_path = if ($Output) { $Output } else { "builds\$Configuration" }
+  }
+  'vs-deploy' {
+    $cmd.package = $Package
+    $cmd.dest = $Dest
+    $cmd.configuration = $Configuration
+    $cmd.post_deploy_script = $Script
+  }
+  default { 
+    $cmd.script = $Script
+    if ($Args) { $cmd.args = $Args }
+  }
+}
+
+# Create summary for multi-PC operations
+$summary = @{
+  operation = $Type
+  target_hosts = $Hosts
+  timestamp = $cmd.timestamp
+  parameters = $cmd | Select-Object -ExcludeProperty id,type,timestamp,queued_by,queued_from
+}
+
+foreach ($h in $Hosts) {
+  $dir = Join-Path $QueueRoot ($h.ToLower())
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $file = Join-Path $dir ("command_" + $cmd.id + ".json")
+  ($cmd | ConvertTo-Json -Depth 8) | Set-Content -Encoding UTF8 $file
+  Write-Host "Queued $($cmd.type) for $h (id=$($cmd.id)) -> $file" -ForegroundColor Green
+}
+
+# Save operation summary for tracking
+$summaryPath = Join-Path $QueueRoot "_operations\operation_$($cmd.id).json"
+New-Item -ItemType Directory -Force -Path (Split-Path $summaryPath) | Out-Null
+($summary | ConvertTo-Json -Depth 8) | Set-Content -Encoding UTF8 $summaryPath
+
+# Show monitoring commands
+Write-Host "`n=== Monitoring Commands ===" -ForegroundColor Cyan
+Write-Host "Track operation: Get-Content '$summaryPath' | ConvertFrom-Json"
+Write-Host "Monitor fleet:   Get-ChildItem '$QueueRoot\*\*.done.json' | Select-Object -Last 5"
+
+if ($Type -eq 'ollama') {
+  Write-Host "View AI output:  Get-Content '$QueueRoot\$($Hosts[0])\$Output' -Wait" -ForegroundColor Yellow
+}
+
+if ($Type -eq 'vs-build') {
+  Write-Host "Build logs:      Get-Content '$QueueRoot\*\build_*.log' -Tail 20" -ForegroundColor Yellow
+}
+
+# VS Code integration hint
+Write-Host "`n=== VS Code Integration ===" -ForegroundColor Magenta
+Write-Host "Open workspace: code fleet-workspace.code-workspace"
+Write-Host "Run task:       Ctrl+Shift+P -> Tasks: Run Task"

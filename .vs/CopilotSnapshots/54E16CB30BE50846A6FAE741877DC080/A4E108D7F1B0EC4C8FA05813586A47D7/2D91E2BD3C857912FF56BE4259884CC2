@@ -1,0 +1,240 @@
+﻿[CmdletBinding()]
+param(
+    [string]$WorkspacePath = (Split-Path -Parent $PSScriptRoot),
+    [string]$UnitTestPath = "Data/boardroom_13_test.py",
+    [string]$ReportsDir = "Data/_report",
+    [string]$LogsDir = "Data/logs/closeout",
+    [string]$SealsDir = "Data/_seals",
+    [switch]$SkipUnit,
+    [switch]$DryRun,
+    [string]$MemoTitle = "Master Close-out Report"
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# Utilities ---------------------------------------------------------------
+function New-Dir {
+    param([string]$Path)
+    if (-not [string]::IsNullOrWhiteSpace($Path)) { $full = Join-Path $WorkspacePath $Path; New-Item -ItemType Directory -Force -Path $full | Out-Null; return $full }
+}
+
+$ts = Get-Date -Format 'yyyyMMdd_HHmmss'
+$logRoot = New-Dir -Path $LogsDir
+$repRoot = New-Dir -Path $ReportsDir
+$sealRoot = New-Dir -Path $SealsDir
+$LogPath = Join-Path $logRoot "closeout_$ts.log"
+$MemoPath = Join-Path $repRoot "CLOSEOUT_$ts.md"
+$ManifestPath = Join-Path $sealRoot "closeout_$ts.manifest.json"
+$SealPath = Join-Path $sealRoot "closeout_$ts.sha256"
+
+function Write-Log {
+    param([ValidateSet('INFO','WARN','ERROR')] [string]$Level = 'INFO',[string]$Message)
+    $line = "[$(Get-Date -Format o)] [$Level] $Message"
+    Write-Host $line
+    Add-Content -LiteralPath $LogPath -Value $line
+}
+
+function Invoke-Step {
+    param([string]$Name,[scriptblock]$Action)
+    Write-Log -Level INFO -Message "=== START: $Name ==="
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        & $Action
+        $sw.Stop()
+        Write-Log -Level INFO -Message "=== OK: $Name in $($sw.Elapsed) ==="
+        return @{ name=$Name; status='ok'; ms=$sw.ElapsedMilliseconds }
+    } catch {
+        $sw.Stop()
+        Write-Log -Level ERROR -Message "=== FAIL: $Name in $($sw.Elapsed) ==="
+        Write-Log -Level ERROR -Message $_.Exception.Message
+        return @{ name=$Name; status='fail'; ms=$sw.ElapsedMilliseconds; error=$_.Exception.Message }
+    }
+}
+
+function Git-Exec {
+    param([string[]]$Args)
+    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pinfo.FileName = 'git'
+    $pinfo.WorkingDirectory = $WorkspacePath
+    $pinfo.RedirectStandardOutput = $true
+    $pinfo.RedirectStandardError = $true
+    $pinfo.UseShellExecute = $false
+    $pinfo.CreateNoWindow = $true
+    $pinfo.ArgumentList.AddRange($Args)
+    $p = [System.Diagnostics.Process]::Start($pinfo)
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    if ($err) { Write-Log -Level WARN -Message ("git: " + $err.Trim()) }
+    return $out.Trim()
+}
+
+function Compute-Hash([string]$Path) {
+    (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+# Audit: detect potential infinite loops ---------------------------------
+function Audit-RecursiveLoops {
+    param([string]$Root)
+    $patterns = @(
+        'while\s*\(\s*true\s*\)',     # C/JS while(true)
+        'for\s*\(\s*;\s*;\s*\)',     # C for(;;)
+        'while\s+True\s*:',              # Python while True:
+        'while\s+1\s*:',                 # Python while 1:
+        'Thread\.Sleep\(\s*Timeout\.Infinite\s*\)',
+        'Task\.Delay\(\s*Timeout\.Infinite' 
+    )
+    $excludeDirs = @('.git','node_modules','DATA/_work','Data/_work','Data/logs','DATA/logs')
+    $files = Get-ChildItem -LiteralPath $Root -Recurse -File -Include *.py,*.ps1,*.psm1,*.js,*.ts,*.cs,*.cpp,*.c,*.h,*.hpp -ErrorAction SilentlyContinue |
+        Where-Object { $excludeDirs -notcontains $_.DirectoryName.Substring($Root.Length).TrimStart('\','/').Split([io.path]::DirectorySeparatorChar)[0] }
+    $hits = @()
+    foreach ($f in $files) {
+        try {
+            $content = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop
+            foreach ($pat in $patterns) {
+                if ([regex]::IsMatch($content, $pat, 'IgnoreCase')) {
+                    $hits += [pscustomobject]@{ file = $f.FullName; pattern = $pat }
+                }
+            }
+        } catch { Write-Log -Level WARN -Message "Audit skip: $($f.FullName) $_" }
+    }
+    return $hits
+}
+
+# Begin -------------------------------------------------------------------
+Write-Log -Message "Close-out started for $WorkspacePath"
+Write-Log -Message "Log: $LogPath"
+
+$results = @()
+$failures = 0
+
+# Git summary
+$results += Invoke-Step -Name 'Git Summary' -Action {
+    $branch = Git-Exec 'rev-parse','--abbrev-ref','HEAD'
+    $sha = Git-Exec 'rev-parse','HEAD'
+    $status = Git-Exec 'status','--porcelain=v2'
+    Write-Log -Message "Branch: $branch"
+    Write-Log -Message "Commit: $sha"
+    Write-Log -Message "Status:\n$status"
+}
+if ($results[-1].status -ne 'ok') { $failures++ }
+
+# Unit tests (current repo reality)
+if (-not $SkipUnit) {
+    $results += Invoke-Step -Name 'Unit Tests (python Data/boardroom_13_test.py)' -Action {
+        $testPath = Join-Path $WorkspacePath $UnitTestPath
+        if (-not (Test-Path -LiteralPath $testPath)) { throw "Unit test script not found: $testPath" }
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = 'python'
+        $psi.ArgumentList.Add($testPath)
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.WorkingDirectory = $WorkspacePath
+        $psi.UseShellExecute = $false
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $out = $p.StandardOutput.ReadToEnd()
+        $err = $p.StandardError.ReadToEnd()
+        $p.WaitForExit()
+        if ($out) { Write-Log -Message ("UNIT OUT\n" + $out.Trim()) }
+        if ($err) { Write-Log -Level WARN -Message ("UNIT ERR\n" + $err.Trim()) }
+        if ($p.ExitCode -ne 0) { throw "Unit test process failed with exit code $($p.ExitCode)" }
+    }
+    if ($results[-1].status -ne 'ok') { $failures++ }
+}
+
+# Adversarial tests (placeholder)
+$results += Invoke-Step -Name 'Adversarial Tests (placeholder)' -Action {
+    Write-Log -Message 'Skipping adversarial tests. Add RUN-5/RUN-6 harness here.'
+    <# Example when ready:
+       python tools/run5.py --mode aggressive --report Data/_report/run5_$ts.json
+       python tools/run6.py --targets critical --report Data/_report/run6_$ts.json
+    #>
+}
+
+# UI / Playwright (placeholder)
+$results += Invoke-Step -Name 'UI/Playwright Tests (placeholder)' -Action {
+    Write-Log -Message 'Skipping UI tests. Add dashboard smoke tests here.'
+    <# Example when ready:
+       npx playwright test --reporter=list --config=playwright.config.ts
+    #>
+}
+
+# Recursive loop audit
+$loopHits = @()
+$results += Invoke-Step -Name 'Recursive Loop Audit' -Action {
+    $loopHits = Audit-RecursiveLoops -Root $WorkspacePath
+    if ($loopHits.Count -gt 0) {
+        Write-Log -Level WARN -Message "Potential infinite loops detected: $($loopHits.Count)"
+        foreach ($h in $loopHits) { Write-Log -Level WARN -Message ("Loop pattern in " + $h.file + " :: " + $h.pattern) }
+    } else {
+        Write-Log -Message 'No potential infinite loops found.'
+    }
+}
+
+# Memo generation ---------------------------------------------------------
+$who = "$env:UserDomain\\$env:UserName"
+$hostInfo = "$env:COMPUTERNAME"
+$branch = Git-Exec 'rev-parse','--abbrev-ref','HEAD'
+$sha = Git-Exec 'rev-parse','HEAD'
+$uncommitted = (Git-Exec 'status','--porcelain').Split("`n").Where({ $_ -ne '' }).Count
+
+$memo = @()
+$memo += "# $MemoTitle"
+$memo += ""
+$memo += "- Timestamp: $(Get-Date -Format o)"
+$memo += "- Operator: $who"
+$memo += "- Host: $hostInfo"
+$memo += "- Git Branch: $branch"
+$memo += "- Git Head: $sha"
+$memo += "- Uncommitted Changes: $uncommitted"
+$memo += ""
+$memo += "## Steps"
+foreach ($r in $results) {
+    $memo += "- ${($r.name)}: ${($r.status)} (${($r.ms)} ms)"
+}
+$memo += ""
+$memo += "## Findings"
+$memo += "- Recursive loop hits: $($loopHits.Count)"
+if ($loopHits.Count -gt 0) {
+    foreach ($h in $loopHits) { $memo += "  - $($h.file) :: $($h.pattern)" }
+}
+$memo += ""
+$memo += "## Artifacts"
+$memo += "- Log: $LogPath"
+$memo += "- Manifest: $ManifestPath"
+$memo += "- Seal: $SealPath"
+$memo += ""
+$memo += "## Placeholders"
+$memo += "- Adversarial tests: add RUN-5 / RUN-6 harness commands to script section."
+$memo += "- UI tests: add Playwright smoke tests once dashboard exists."
+
+$memo | Set-Content -LiteralPath $MemoPath -Encoding UTF8
+Write-Log -Message "Memo written: $MemoPath"
+
+# Seal-friendly manifest and seal ----------------------------------------
+$manifest = [ordered]@{
+    timestamp = (Get-Date -Format o)
+    operator  = $who
+    branch    = $branch
+    head      = $sha
+    artifacts = @(
+        @{ path = (Resolve-Path -LiteralPath $LogPath).Path; sha256 = (Compute-Hash $LogPath) },
+        @{ path = (Resolve-Path -LiteralPath $MemoPath).Path; sha256 = (Compute-Hash $MemoPath) }
+    )
+}
+($manifest | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
+
+$sealHash = Compute-Hash -Path $ManifestPath
+$sealContent = "sha256:$sealHash  $(Split-Path -Leaf $ManifestPath)"
+$sealContent | Set-Content -LiteralPath $SealPath -Encoding ASCII
+Write-Log -Message "Seal generated: $sealHash"
+
+# Final summary -----------------------------------------------------------
+$hadFailure = ($results | Where-Object { $_.status -ne 'ok' }).Count -gt 0
+if ($hadFailure) {
+    Write-Log -Level ERROR -Message "Close-out completed WITH FAILURES. Review $LogPath and $MemoPath"
+    if (-not $DryRun) { exit 1 }
+} else {
+    Write-Log -Level INFO -Message "Close-out completed successfully. Review $MemoPath"
+}

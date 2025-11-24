@@ -1,0 +1,167 @@
+﻿param(
+  [switch]$Once,
+  [int]$IntervalSec = 300,
+  [switch]$AuditOnly
+)
+
+# Paths
+$Root = $PSScriptRoot
+$LogDir = Join-Path $Root "logs"
+$new = New-Item -ItemType Directory -Force -Path $LogDir -ErrorAction SilentlyContinue
+$LogFile = Join-Path $LogDir "SelfHealAutomation.log"
+$JsonLog = Join-Path $LogDir "SelfHealAutomation.jsonl"
+
+# Defaults (edit as needed)
+$CriticalServices = @(
+  'Spooler',     # Print Spooler (example)
+  'wuauserv'     # Windows Update (example)
+)
+$DiskSpaceThresholdGB = 5
+$TempPath = "C:\\Temp"
+$CircuitOpenUntil = Get-Date 0
+
+function Write-Log {
+  param(
+    [ValidateSet('Debug','Info','Warn','Error')]$Level = 'Info',
+    [string]$Message,
+    [hashtable]$Data
+  )
+  $ts = Get-Date
+  $evt = [ordered]@{
+    ts    = $ts.ToString('o')
+    host  = $env:COMPUTERNAME
+    level = $Level
+    msg   = $Message
+    data  = $Data
+  }
+  $line = ($evt | ConvertTo-Json -Depth 8 -Compress)
+  Add-Content -Path $JsonLog -Value $line
+  Add-Content -Path $LogFile -Value ("{0:u} [{1}] {2}" -f $ts, $Level, $Message)
+}
+
+function Invoke-WithRetry {
+  param(
+    [Parameter(Mandatory)] [scriptblock]$Action,
+    [string]$Name = 'op',
+    [int]$Retries = 3,
+    [int]$BaseDelayMs = 500,
+    [int]$CircuitSeconds = 30
+  )
+  if ((Get-Date) -lt $CircuitOpenUntil) {
+    Write-Log -Level Warn -Message "Circuit open, skipping $Name" -Data @{ until = $CircuitOpenUntil }
+    return $null
+  }
+  for ($i = 0; $i -le $Retries; $i++) {
+    try {
+      $r = & $Action
+      Write-Log -Level Info -Message "Success $Name" -Data @{ attempt = $i }
+      return $r
+    } catch {
+      Write-Log -Level Warn -Message "Fail $Name" -Data @{ attempt = $i; error = "$_" }
+      if ($i -eq $Retries) {
+        $script:CircuitOpenUntil = (Get-Date).AddSeconds($CircuitSeconds)
+        Write-Log -Level Error -Message "Open circuit for $Name" -Data @{ seconds = $CircuitSeconds }
+        throw
+      }
+      $delay = [math]::Min($BaseDelayMs * [math]::Pow(2,$i), 8000)
+      Start-Sleep -Milliseconds $delay
+    }
+  }
+}
+
+# Guardrails
+$script:ActionsThisCycle = 0
+$script:LastActionAt = Get-Date 0
+$MaxActionsPerCycle = 3
+$CooldownSeconds = 60
+
+function Should-Act {
+  if ($AuditOnly) { return $false }
+  if ($script:ActionsThisCycle -ge $MaxActionsPerCycle) { return $false }
+  if ((Get-Date) -lt $script:LastActionAt.AddSeconds($CooldownSeconds)) { return $false }
+  return $true
+}
+
+function Try-Remediate {
+  param([string]$Name, [scriptblock]$Action)
+  Write-Log -Message "Remediation considered: $Name"
+  if (-not (Should-Act)) {
+    Write-Log -Level Warn -Message "Remediation skipped (audit/guardrail): $Name"
+    return
+  }
+  Invoke-WithRetry -Name $Name -Action {
+    & $Action
+    $script:ActionsThisCycle++
+    $script:LastActionAt = Get-Date
+  }
+}
+
+# Self-improvement via external config (optional)
+$ConfigPath = Join-Path $Root 'ThresholdConfig.json'
+function Load-Thresholds {
+  if (Test-Path $ConfigPath) {
+    try {
+      $cfg = Get-Content $ConfigPath -Encoding UTF8 | ConvertFrom-Json
+      if ($cfg.DiskSpaceThresholdGB) { $script:DiskSpaceThresholdGB = [int]$cfg.DiskSpaceThresholdGB }
+      if ($cfg.CriticalServices)    { $script:CriticalServices     = @($cfg.CriticalServices) }
+      Write-Log -Message 'Thresholds loaded' -Data @{ diskGB=$DiskSpaceThresholdGB; services=$CriticalServices }
+    } catch { Write-Log -Level Warn -Message 'Failed to load thresholds' -Data @{ error = "$_" } }
+  }
+}
+
+# Checks
+function Check-Service {
+  param([string]$ServiceName)
+  try {
+    $svc = Get-Service -Name $ServiceName -ErrorAction Stop
+    if ($svc.Status -ne 'Running') {
+      Try-Remediate -Name "Start $ServiceName" -Action { Start-Service -Name $ServiceName -ErrorAction Stop }
+    }
+    Write-Log -Message "Service status" -Data @{ service=$ServiceName; status=$svc.Status }
+  } catch { Write-Log -Level Error -Message "Service check failed: $ServiceName" -Data @{ error = "$_" } }
+}
+
+function Check-DiskSpace {
+  try {
+    $drive = Get-PSDrive -Name C -ErrorAction Stop
+    $freeGB = [math]::Round($drive.Free/1GB,2)
+    Write-Log -Message 'Disk space' -Data @{ drive='C'; freeGB=$freeGB; threshold=$DiskSpaceThresholdGB }
+    if ($freeGB -lt $DiskSpaceThresholdGB) {
+      Try-Remediate -Name 'Clean temp' -Action {
+        if (Test-Path $TempPath) { Remove-Item -Path (Join-Path $TempPath '*') -Recurse -Force -ErrorAction SilentlyContinue }
+      }
+    }
+  } catch { Write-Log -Level Error -Message 'Disk check failed' -Data @{ error = "$_" } }
+}
+
+function Check-Network {
+  try {
+    $ok = Test-Connection -ComputerName '8.8.8.8' -Count 2 -Quiet
+    if (-not $ok) {
+      Try-Remediate -Name 'Reset NIC' -Action {
+        $nic = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1)
+        if ($nic) {
+          Disable-NetAdapter -Name $nic.Name -Confirm:$false
+          Start-Sleep -Seconds 5
+          Enable-NetAdapter -Name $nic.Name -Confirm:$false
+        }
+      }
+    }
+    Write-Log -Message 'Network check' -Data @{ ok=$ok }
+  } catch { Write-Log -Level Error -Message 'Network check failed' -Data @{ error = "$_" } }
+}
+
+function Run-Cycle {
+  $script:ActionsThisCycle = 0
+  Load-Thresholds
+  Write-Log -Message '==== Cycle start ===='
+  foreach ($s in $CriticalServices) { Check-Service -ServiceName $s }
+  Check-DiskSpace
+  Check-Network
+  Write-Log -Message '==== Cycle end ===='
+}
+
+# Main
+Write-Log -Message "SelfHeal start (AuditOnly=$AuditOnly, IntervalSec=$IntervalSec)"
+if ($Once) { Run-Cycle; exit 0 }
+while ($true) { Run-Cycle; Start-Sleep -Seconds $IntervalSec }

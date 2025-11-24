@@ -1,0 +1,40 @@
+﻿#pragma once
+
+#include <string>
+#include <vector>
+#include <cstddef>
+
+// Compute SHA256 of input data (uses libsodium when available in implementation)
+std::vector<unsigned char> compute_sha256(const std::string &data);
+
+// Compute Merkle root hex string for a list of file paths
+std::string compute_merkle_root_from_files(const std::vector<std::string>& paths);
+
+// Load public key from file (hex or raw). Returns empty vector on error and sets err message.
+std::vector<unsigned char> load_pubkey_from_file(const std::string &path, std::string &err);
+
+// Verify Ed25519 signature (requires libsodium at link-time). Returns true if valid.
+bool verify_signature_ed25519(const std::vector<unsigned char>& pubkey,
+                              const std::vector<unsigned char>& sig,
+                              const std::string& message);
+
+// ---------------- Batch Merkle Proof API ----------------
+// Per-leaf proof path: siblings bottom -> top
+struct BatchLeafProof {
+    size_t leafIndex;                      // original index in leaf array
+    std::string leafHashHex;               // hex SHA256 of leaf data
+    std::vector<std::string> siblingHex;   // sibling hash per level (mirrored if odd)
+    std::vector<bool> leafIsLeft;          // orientation per level: true if leaf (or current node) was left child at that level
+};
+
+struct BatchMerkleProof {
+    std::string rootHex;                   // Merkle root hex
+    std::vector<BatchLeafProof> leaves;    // proofs for each target leaf
+};
+
+// Build a batch Merkle proof (creates individual paths). Optimisations (dedup) may be added later.
+BatchMerkleProof build_batch_merkle_proof(const std::vector<std::string>& paths,
+                                          const std::vector<size_t>& targetIndices);
+
+// Verify all leaf proofs independently against root.
+bool verify_batch_merkle_proof(const BatchMerkleProof& proof);

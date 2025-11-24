@@ -1,0 +1,35 @@
+﻿param([int]$LookbackMinutes=10)
+$ErrorActionPreference='Stop'
+$Base='C:\Sovereign'
+$LedgerDir="$Base\ledger\blocks"
+$HeartbeatLog="$Base\ledger\heartbeat.log"
+$LogFile="$Base\logs\archival_heartbeat.log"
+
+function Log($m){"$((Get-Date).ToString('s'))`t$env:COMPUTERNAME`t$m" | Out-File -FilePath $LogFile -Append -Encoding utf8; Write-Host $m }
+
+if(-not (Test-Path $LedgerDir)){ Log "Ledger dir missing: $LedgerDir"; exit 1 }
+$cutoff=(Get-Date).AddMinutes(-$LookbackMinutes)
+$recent=Get-ChildItem -Path $LedgerDir -File | Where-Object { $_.LastWriteTime -ge $cutoff } | Sort-Object LastWriteTime
+if(-not $recent){ Log "No recent blocks in past $LookbackMinutes min."; exit 0 }
+Log "Building Merkle root over $($recent.Count) blocks"
+
+$hashes=@()
+foreach($b in $recent){
+  try {
+    $json=Get-Content $b.FullName -Raw | ConvertFrom-Json
+    if($json.hash){ $hashes += $json.hash } else {
+      $bytes=[System.IO.File]::ReadAllBytes($b.FullName)
+      $sha=[System.Security.Cryptography.SHA256]::Create()
+      $h=$sha.ComputeHash($bytes); $hashes += ($h | ForEach-Object ToString x2) -join ''
+    }
+  } catch { Log "WARN cannot parse $($b.Name)" }
+}
+if(-not $hashes){ Log 'No usable hashes found.'; exit 1 }
+
+function Get-MerkleRoot([string[]]$leaf){ if($leaf.Count -eq 1){ return $leaf[0] } $sha=[System.Security.Cryptography.SHA256]::Create(); $current=$leaf; while($current.Count -gt 1){ $next=@(); for($i=0;$i -lt $current.Count;$i+=2){ if($i -eq $current.Count-1){ $left=$current[$i]; $right=$current[$i] } else { $left=$current[$i]; $right=$current[$i+1] } $bytes=[System.Text.Encoding]::UTF8.GetBytes($left+$right); $h=$sha.ComputeHash($bytes); $next += ($h | ForEach-Object ToString x2) -join '' } $current=$next } return $current[0] }
+
+$root=Get-MerkleRoot $hashes
+$rangeStart=$recent[0].Name; $rangeEnd=$recent[-1].Name
+$record=@{ timestamp=(Get-Date).ToString('o'); node=$env:COMPUTERNAME; range_start=$rangeStart; range_end=$rangeEnd; merkle_root=$root; status='PENDING_REMOTE' } | ConvertTo-Json -Compress
+$record | Out-File -FilePath $HeartbeatLog -Append -Encoding utf8
+Log "Heartbeat recorded root=$root range=$rangeStart->$rangeEnd"

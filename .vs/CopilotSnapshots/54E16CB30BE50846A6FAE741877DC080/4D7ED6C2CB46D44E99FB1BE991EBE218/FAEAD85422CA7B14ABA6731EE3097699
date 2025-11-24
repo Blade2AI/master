@@ -1,0 +1,228 @@
+﻿# SOVEREIGN NODE LAW v1.0
+
+Effective: Immediately  
+Jurisdiction: Local Sovereign System (Andy)
+
+---
+
+## Article 1 — Node Roles
+
+- **PC4 = Sovereign Node 0**
+  - Runs Docker and docker-compose.
+  - Runs all sovereign scripts:
+    - `sovereign_up.py`
+    - `integration_verify.sh`
+    - `healthcheck.py`
+    - agents (`evidence_validator.py`, `property_analyst.py`, etc.)
+  - Holds all runtime data:
+    - `Evidence/`
+    - `Property/`
+    - `data/ledger/`
+  - Is the **only** machine that may write to the sovereign ledger.
+
+- **PC5 = Viewport Only**
+  - No Docker.
+  - No sovereign agents.
+  - No `Evidence/`, `Property/`, or `data/ledger/` directories.
+  - May only:
+    - Remote into PC4 (RDP/SSH/VS Code Remote).
+    - View dashboards, logs, and reports exposed by PC4.
+  - Treat as “eyes only” — no sovereign state is allowed to live here.
+
+---
+
+## Article 2 — Repo & Data Separation (PC4)
+
+The git repository on PC4 **must only** contain code, configs, prompts, and docs.
+
+Runtime data **must never** be committed.
+
+Minimum `.gitignore`:
+
+```gitignore
+# Sovereign runtime data (never commit)
+data/
+Evidence/
+Property/
+Governance/Logs/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# VS Code
+.vscode/
+.history/
+```
+
+Rule:
+
+> If a file contains real-world evidence, property details, or ledger entries,
+> it belongs in `data/`, `Evidence/`, or `Property/`, **never in git**.
+
+---
+
+## Article 3 — Operational Loop (PC4 Only)
+
+All sovereign operations **MUST** be executed on PC4.
+
+Standard loop:
+
+```bash
+# Boot sovereign runtime
+python3 sovereign_up.py
+
+# Verify integration (tracks, volumes, router, ledger)
+./integration_verify.sh
+
+# Ongoing health monitoring
+watch -n 60 python3 healthcheck.py
+```
+
+Evidence flow (PC4):
+
+* Drop files into: `Evidence/Inbox/`
+* Evidence agent processes → `_drafts` (Insider) or `_verified` (Stable)
+* Approvals via:
+
+  * VS Code Sovereign extension, or
+  * Manual file promotion as per SOP
+
+Property flow (PC4):
+
+* Drop leads into: `Property/Leads/`
+* Property agent writes → `Property/Scored/_drafts/` (Insider)
+* Promotion to Stable only after readiness/protocol criteria are met.
+
+---
+
+## Article 4 — PC5 Restrictions
+
+On PC5, it is **forbidden** to:
+
+* Install or run Docker for sovereign workloads.
+* Create or mount:
+
+  * `Evidence/`
+  * `Property/`
+  * `data/ledger/`
+* Run any sovereign scripts:
+
+  * `sovereign_up.py`
+  * `integration_verify.sh`
+  * `healthcheck.py`
+  * any agent under `src/agents/`
+
+Permitted uses of PC5:
+
+* Remote display for PC4 (RDP/SSH/VS Code Remote).
+* Viewing read-only reports and dashboards rendered from PC4.
+* Reading repo **code-only** clone without runtime data.
+
+---
+
+## Article 5 — Violation Handling
+
+If any sovereign data or agents are found on PC5:
+
+1. **Immediate action**:
+
+   * Stop all processes on PC5.
+   * Remove `Evidence/`, `Property/`, and `data/ledger/` directories from PC5.
+2. **Record incident** (on PC4):
+
+   * Append an event to the sovereign ledger:
+
+     * `event_type: "NODE_LAW_VIOLATION"`
+     * `node: "PC5"`
+     * `action_taken: "data_removed + process_stopped"`
+3. **Review**:
+
+   * Confirm docker and agents only run on PC4.
+   * Re-affirm this document as controlling law.
+
+---
+
+## Article 6 — Authority
+
+* This document is the controlling local law for node roles.
+* Any future orchestration, deployment, or automation must respect:
+
+  * **PC4 = only sovereign execution environment**
+  * **PC5 = display / viewport only**
+
+---
+
+## ARTICLE 11 — VORTEX ROUTING LAW (DRAFT ONLY)
+
+> **STATUS:** DRAFT — NOT ENFORCED IN RUNTIME  
+> This article describes a proposed future-state routing regime for multi-node Sovereign deployments.  
+> It is **not** active. It MUST NOT block, influence, or alter any live routing decisions until
+> `FEATURE_VORTEX` is explicitly enabled by Boardroom vote and recorded in the ledger.
+
+### 11.1 Scope
+
+11.1.1 Vortex Routing Law defines additional constraints and health metrics for message paths between logical pods in a multi-node Sovereign mesh.
+
+11.1.2 A **node** is a physical or logical machine participating in the Sovereign mesh (e.g. `node0`, `node1`, `node2`).
+
+11.1.3 A **domain** is a functional class of workload (e.g. `evidence`, `property`, `ops`).
+
+11.1.4 A **pod** is the combination of a node and a domain (e.g. `node0:property`).
+
+11.1.5 A **path** is an ordered list of pods representing the intended route for a message or state transition.
+
+11.1.6 An **epoch** is a configured time window over which mesh health is measured (e.g. one day).
+
+11.1.7 While this article is in DRAFT status:
+- Vortex simulations and metrics MAY be logged.
+- Vortex constraints MUST NOT cause requests to be blocked, downgraded, or rerouted.
+- Any enforcement code MUST be gated behind `FEATURE_VORTEX = True`.
+
+### 11.2 3-Resonance Rule (Critical Path Diversity)
+
+11.2.1 A **critical path** is any path associated with actions that can directly: move/commit funds; create/modify legal filings; change external commitments; alter constitutional configuration.
+
+11.2.2 A critical path MUST satisfy BOTH:
+- (a) length ≥ 3 hops; and
+- (b) visits ≥ 3 distinct nodes OR ≥ 3 distinct domains.
+
+11.2.3 Non-compliance SHOULD be recorded as `CVF.VORTEX_INSUFFICIENT_RESONANCE` (simulation) and `would_reject = true`.
+
+11.2.4 While DRAFT, 11.2.2 MAY be logged but MUST NOT block execution.
+
+### 11.3 6-Flow Rule (Cross-Node Mesh Health)
+
+11.3.1 Each epoch SHOULD observe ≥ 6 cross-node edges.
+11.3.2 If fewer, classify mesh health `DEGRADED_VORTEX_FLOW`.
+11.3.3 Simulations SHOULD log this state; readiness SHOULD surface it.
+11.3.4 Informational only while DRAFT; MUST NOT alter routing.
+
+### 11.4 9-Activation Rule (Pod Participation)
+
+11.4.1 Across 9 consecutive epochs, each pod SHOULD send ≥1 and receive ≥1 message.
+11.4.2 Failure → pod marked **starved**.
+11.4.3 Starved pods SHOULD appear in health reports; MAY trigger capacity review.
+11.4.4 Advisory only; not a constitutional failure.
+
+### 11.5 Spiral Preference (Heuristic)
+
+11.5.1 A **spiral pattern**: pod revisited after exactly two intermediate hops (A→B→A).
+11.5.2 Spiral paths MAY receive a scoring bonus.
+11.5.3 Heuristic only; MUST NOT override IAM, track constraints, cost ceilings, or other active checks.
+
+### 11.6 No Dead-End Pods (Topology Smell)
+
+11.6.1 Pod is **dead-end** if for >1 epoch total used edges (in+out) < 2.
+11.6.2 Dead-ends SHOULD be logged; MAY generate topology proposals.
+11.6.3 MUST NOT auto-edit topology; changes require governance.
+
+### 11.7 Implementation Status
+
+11.7.1 While `FEATURE_VORTEX` = False: DRAFT only; simulation allowed; NO enforcement.
+11.7.2 Activation requires: (a) Boardroom approval in ledger; (b) flag set True; (c) tagged release noting activation.
+11.7.3 Until activation, MUST NOT be described as active behaviour externally.

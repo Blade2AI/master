@@ -1,0 +1,2 @@
+#pragma once
+// Deprecated stub (manual test runner now used).

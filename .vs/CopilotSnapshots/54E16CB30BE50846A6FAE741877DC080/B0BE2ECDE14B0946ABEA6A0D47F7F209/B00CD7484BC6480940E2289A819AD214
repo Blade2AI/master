@@ -1,0 +1,47 @@
+﻿version: '3.8'
+services:
+  boardroom:
+    build:
+      context: .
+      dockerfile: Dockerfile.generic
+    container_name: sovereign_boardroom
+    command: python -m boardroom.boardroom
+    volumes:
+      - ./Governance:/app/Governance
+      - ./data:/app/data
+    environment:
+      - TRACK=${TRACK:-insider}
+      - GOV_MAX_COST=${GOV_MAX_COST:-50.0}
+    networks:
+      - sovereign_net
+  executor:
+    build:
+      context: .
+      dockerfile: Dockerfile.generic
+    container_name: sovereign_executor
+    command: python -m executor.executor
+    volumes:
+      - ./Evidence:/app/Evidence
+      - ./Governance:/app/Governance
+    environment:
+      - TRACK=${TRACK:-insider}
+    depends_on:
+      - boardroom
+    networks:
+      - sovereign_net
+  scout:
+    build:
+      context: .
+      dockerfile: Dockerfile.generic
+    container_name: sovereign_scout
+    command: python -m scout.scout
+    volumes:
+      - ./Property:/app/Property
+      - ./Governance:/app/Governance
+    environment:
+      - TRACK=${TRACK:-insider}
+    networks:
+      - sovereign_net
+networks:
+  sovereign_net:
+    driver: bridge

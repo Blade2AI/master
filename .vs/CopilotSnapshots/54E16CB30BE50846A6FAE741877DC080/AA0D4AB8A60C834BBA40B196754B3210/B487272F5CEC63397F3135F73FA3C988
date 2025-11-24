@@ -1,0 +1,81 @@
+﻿[CmdletBinding()]
+param(
+  [Parameter(ParameterSetName='Org', Mandatory=$true)][string]$Org,
+  [Parameter(ParameterSetName='User',Mandatory=$true)][string]$User,
+  [string]$Token,
+  [ValidateSet('all','public','private')][string]$Visibility='all',
+  [string]$ManifestFile = "$PSScriptRoot/../repos.manifest.txt",
+  [string]$DestRoot,
+  [switch]$Clone,
+  [switch]$PullIfExists
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Write-Info($m){ Write-Host "[INFO] $m" -ForegroundColor Cyan }
+function Write-Warn($m){ Write-Host "[WARN] $m" -ForegroundColor Yellow }
+function Write-Err ($m){ Write-Host "[FAIL] $m" -ForegroundColor Red }
+
+# Resolve manifest path
+$ManifestFile = [IO.Path]::GetFullPath((Resolve-Path $ManifestFile).Path)
+if (-not (Test-Path -LiteralPath $ManifestFile)) { New-Item -ItemType File -Path $ManifestFile -Force | Out-Null }
+
+# Load existing URLs to avoid duplicates
+$existing=@{}
+Get-Content -LiteralPath $ManifestFile | ForEach-Object {
+  $raw=$_.Trim(); if ($raw -and -not $raw.StartsWith('#')) { $parts=$raw -split '\s+'; if ($parts.Length -ge 1) { $existing[$parts[0]]=$true } }
+}
+
+$headers = @{ 'Accept'='application/vnd.github+json'; 'User-Agent'='PrecisePointway-Automation' }
+if (-not $Token) { $Token = $env:GITHUB_TOKEN }
+if ($Token) { $headers['Authorization'] = "Bearer $Token" }
+
+function Get-GHPage($url){
+  try { return Invoke-RestMethod -Method GET -Headers $headers -Uri $url -ErrorAction Stop }
+  catch { throw "GitHub API request failed: $($PSItem.Exception.Message) URL=$url" }
+}
+
+$base = if ($PSCmdlet.ParameterSetName -eq 'Org') { "https://api.github.com/orgs/$Org/repos" } else { "https://api.github.com/users/$User/repos" }
+$page=1
+$all=@()
+while ($true) {
+  $url = "$( $base )?per_page=100&page=$page&sort=full_name&direction=asc"
+  if ($PSCmdlet.ParameterSetName -eq 'Org') {
+    if ($Visibility -ne 'all') { $url += "&type=$Visibility" }
+  }
+  $resp = Get-GHPage $url
+  if (-not $resp -or $resp.Count -eq 0) { break }
+  $all += $resp
+  $page++
+}
+
+$subject = if ($PSCmdlet.ParameterSetName -eq 'Org') { $Org } else { $User }
+if ($all.Count -eq 0) { Write-Warn ("No repositories returned by GitHub for {0}." -f $subject); return }
+
+$newLines=@()
+foreach ($r in $all) {
+  $url = $r.clone_url
+  $name = $r.name
+  if (-not $url) { continue }
+  if (-not $existing.ContainsKey($url)) {
+    $line = "$url $name"
+    $newLines += $line
+    $existing[$url]=$true
+  }
+}
+
+if ($newLines.Count -gt 0) {
+  Write-Info "Appending $($newLines.Count) repo(s) to $ManifestFile"
+  Add-Content -LiteralPath $ManifestFile -Value ("# Added from GitHub $(Get-Date -Format o)")
+  $newLines | Add-Content -LiteralPath $ManifestFile
+} else {
+  Write-Info "Manifest already up to date; no new repos to append."
+}
+
+if ($Clone) {
+  if (-not $DestRoot) { throw "-DestRoot is required when -Clone is specified." }
+  $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"$PSScriptRoot/Clone-All-Repos.ps1",'-ManifestFile', $ManifestFile,'-DestRoot', $DestRoot)
+  if ($PullIfExists) { $args += '-PullIfExists' }
+  Write-Info "Starting clone/update to $DestRoot"
+  & powershell @args
+}

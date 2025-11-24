@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sovereign.local/schemas/event_anchor.json",
+  "title": "Event Anchor",
+  "description": "GDPR-hardened anchor record for ledger state. No personal data, only technical hashes and anchor receipts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "anchor_id",
+    "node_id",
+    "root_hash",
+    "hash_algorithm",
+    "timestamp_utc",
+    "backends"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this schema definition, e.g. 1.0.0."
+    },
+    "anchor_id": {
+      "type": "string",
+      "description": "Opaque unique identifier for this anchor event (e.g. UUID or ULID).",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "node_id": {
+      "type": "string",
+      "description": "Pseudonymous node identifier (e.g. node-uk-01). Must not contain personal data.",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "root_hash": {
+      "type": "string",
+      "description": "Hex-encoded root hash of the ledger snapshot or Merkle tree.",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "description": "Hash algorithm used to derive root_hash.",
+      "enum": ["sha256"]
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp when the anchor was created.",
+      "format": "date-time"
+    },
+    "backends": {
+      "type": "object",
+      "description": "Details for each immutable storage backend used for anchoring.",
+      "additionalProperties": false,
+      "properties": {
+        "arweave": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "True if Arweave/Bundlr anchoring is expected for this record."
+            },
+            "tx_id": {
+              "type": ["string", "null"],
+              "description": "Arweave transaction ID returned by Bundlr. Null until confirmed.",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "bundlr_node": {
+              "type": ["string", "null"],
+              "description": "Bundlr node URL or identifier used for upload.",
+              "maxLength": 256
+            }
+          }
+        },
+        "ipfs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "True if IPFS anchoring is expected (e.g. via nft.storage)."
+            },
+            "cid": {
+              "type": ["string", "null"],
+              "description": "IPFS CID returned by the pinning service. Null until confirmed.",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "provider": {
+              "type": ["string", "null"],
+              "description": "Name of IPFS provider (e.g. nft.storage).",
+              "maxLength": 128
+            }
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "description": "Optional cryptographic signature over the anchor record.",
+      "additionalProperties": false,
+      "required": ["alg", "key_id", "value"],
+      "properties": {
+        "alg": {
+          "type": "string",
+          "description": "Signature algorithm (e.g. ed25519, rsa-pss-sha256).",
+          "maxLength": 64
+        },
+        "key_id": {
+          "type": "string",
+          "description": "Identifier for the signing key (no raw key material).",
+          "maxLength": 128
+        },
+        "value": {
+          "type": ["string", "null"],
+          "description": "Base64-encoded signature value. Null until locally signed.",
+          "maxLength": 4096
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "description": "Optional technical metadata. Must not contain personal data.",
+      "additionalProperties": false,
+      "properties": {
+        "backend_version": {
+          "type": ["string", "null"],
+          "description": "Version of the anchoring service that produced this record.",
+          "maxLength": 64
+        },
+        "environment": {
+          "type": ["string", "null"],
+          "description": "Environment tag (dev, staging, prod, proof).",
+          "enum": ["dev", "staging", "prod", "proof", null]
+        }
+      }
+    }
+  }
+}

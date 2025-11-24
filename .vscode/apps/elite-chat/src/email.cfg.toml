@@ -1,0 +1,80 @@
+[connectors]
+mode = "read_only"
+sources = ["imap_gmail","mbox","maildir"]
+consent_required = true
+zero_write_guarantee = true
+
+[imap_gmail]
+oauth = true
+label_include = ["INBOX"]
+max_messages = 5000
+readonly_mode = true
+
+[imap_outlook]
+oauth = true
+folder_include = ["Inbox"]
+max_messages = 5000
+readonly_mode = true
+
+[index]
+path = "./.codex_index"
+attachments = "hash_only"   # on_demand for content
+dedupe = true
+thread_window_days = 30
+evidence_log = "codex/ledgers/email_evidence.csv"
+
+[query]
+aliases = [
+    "Tommy Robinson",
+    "Stephen Christopher Yaxley-Lennon", 
+    "Stephen Lennon",
+    "Andrew McMaster",
+    "Paul Harris", 
+    "Wayne King"
+]
+watch_terms = [
+    "EDL",
+    "English Defence League",
+    "Middle East Forum",
+    "MEF",
+    "Gatestone",
+    "Gatestone Institute", 
+    "Rebel Media",
+    "Advance UK",
+    "Telegram",
+    "Woodhill",
+    "HMP Woodhill",
+    "Irish passport",
+    "Obama",
+    "Obama Foundation"
+]
+date_focus = ["*13-*","Mar-13","Sep-13","March-13","September-13"]
+
+[nes]
+enable = true
+people = true
+orgs = true
+finance = true
+locations = true
+confidence_threshold = "Medium"
+
+[export]
+csv = "codex/outputs/email_hits.csv"
+pdf = "codex/outputs/email_pack.pdf"
+redact_personal = true
+court_safe = true
+
+[guardrails]
+dry_run_default = true
+no_minors = true
+no_doxxing = true
+minimum_sources = 2
+local_first = true
+biblical_principles = true
+collaborative_kindness = true
+
+[collaboration]
+motto = "In a world you can be anything – be nice."
+truth_filter = true
+fleet_sharing = true
+peer_review_required = true

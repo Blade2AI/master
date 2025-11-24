@@ -1,0 +1,33 @@
+﻿param([string]$Node='PC-D')
+$ErrorActionPreference='Stop'
+
+$baseUNC="\\$Node\C$\Sovereign"
+$hbFile=Join-Path $baseUNC 'ledger\heartbeat.log'
+$ledgerDir=Join-Path $baseUNC 'ledger\blocks'
+
+if(-not (Test-Path $hbFile)){ Write-Error "Heartbeat log not found: $hbFile"; exit 1 }
+if(-not (Test-Path $ledgerDir)){ Write-Error "Ledger blocks dir not found: $ledgerDir"; exit 1 }
+
+function Get-MerkleRoot([string[]]$leaf){ if($leaf.Count -eq 1){ return $leaf[0] } $sha=[System.Security.Cryptography.SHA256]::Create(); $current=$leaf; while($current.Count -gt 1){ $next=@(); for($i=0;$i -lt $current.Count;$i+=2){ if($i -eq $current.Count-1){ $left=$current[$i]; $right=$current[$i] } else { $left=$current[$i]; $right=$current[$i+1] } $bytes=[System.Text.Encoding]::UTF8.GetBytes($left+$right); $h=$sha.ComputeHash($bytes); $next += ($h | ForEach-Object ToString x2) -join '' } $current=$next } return $current[0] }
+
+$lines=Get-Content $hbFile
+$results=@()
+foreach($line in $lines){
+  try { $hb=$line | ConvertFrom-Json } catch { continue }
+  $rangeStart=$hb.range_start; $rangeEnd=$hb.range_end; $expected=$hb.merkle_root
+  $blocks=Get-ChildItem $ledgerDir -File | Sort-Object Name | Where-Object { $_.Name -ge $rangeStart -and $_.Name -le $rangeEnd }
+  $hashes=@()
+  foreach($b in $blocks){
+    try {
+      $json=Get-Content $b.FullName -Raw | ConvertFrom-Json
+      if($json.hash){ $hashes += $json.hash } else {
+        $bytes=[System.IO.File]::ReadAllBytes($b.FullName)
+        $sha=[System.Security.Cryptography.SHA256]::Create(); $h=$sha.ComputeHash($bytes); $hashes += ($h | ForEach-Object ToString x2) -join ''
+      }
+    } catch { }
+  }
+  if($hashes.Count -gt 0){ $actual=Get-MerkleRoot $hashes } else { $actual='(none)' }
+  $status= if($actual -eq $expected){ 'OK' } else { 'MISMATCH' }
+  $results += [pscustomobject]@{ timestamp=$hb.timestamp; range_start=$rangeStart; range_end=$rangeEnd; expected=$expected; actual=$actual; status=$status }
+}
+$results | Format-Table -AutoSize

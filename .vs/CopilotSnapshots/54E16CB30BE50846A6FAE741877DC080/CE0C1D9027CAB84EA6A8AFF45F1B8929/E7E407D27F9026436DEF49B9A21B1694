@@ -1,0 +1,155 @@
+﻿[CmdletBinding()]param(
+  [string]$VerifierExe = "src/verifier/build/Debug/Verify-Evidence.exe",
+  [string]$PolicyManifest = "constitution/policy_manifest.yml",
+  [string]$PolicySignature = "constitution/policy_manifest.sig",
+  [string]$PubkeyFile = "config/secure_keys.yaml",
+  [string]$OutputDir = "logs/compliance",
+  [string]$Standards = "EU_Machinery_2023_1230,ISO_TS_15066,IEC_62443,ISO_12100,IEC_61508,GDPR,NIS2",
+  [string]$AdditionalEvidence = "", # comma-separated list of extra evidence file paths
+  [string]$StoredMerkleFile = "logs/tamper/stored_merkle_root.txt",
+  [string]$SchemaPath = "docs/evidence_schema.json",
+  [switch]$Strict,
+  [switch]$Verbose,
+  [switch]$Json # emit summary JSON to stdout for CI parsing
+)
+
+function Write-Info($m){ Write-Host "[Harness] $m" -ForegroundColor Cyan }
+function Write-Warn($m){ Write-Host "[Harness] $m" -ForegroundColor Yellow }
+function Write-Err($m){ Write-Host "[Harness] $m" -ForegroundColor Red }
+
+$globalStart=[System.Diagnostics.Stopwatch]::StartNew()
+$sectionTimings=@{}
+
+if(-not (Test-Path $OutputDir)){ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null }
+if(-not $Global:HarnessSha256){ $Global:HarnessSha256 = [System.Security.Cryptography.SHA256]::Create() }
+
+function Get-FileSha256($path){
+  $sw=[System.Diagnostics.Stopwatch]::StartNew()
+  $bytes = [System.IO.File]::ReadAllBytes($path)
+  $hash = $Global:HarnessSha256.ComputeHash($bytes)
+  $sw.Stop(); $sectionTimings["hash_$path"]=$sw.ElapsedMilliseconds
+  -join ($hash | ForEach-Object { $_.ToString('x2') })
+}
+function Compute-MerkleRoot([string[]]$paths){
+  $sw=[System.Diagnostics.Stopwatch]::StartNew()
+  $hashes = @()
+  foreach($p in $paths){ if(Test-Path $p){ $hashes += Get-FileSha256 $p } else { $hashes += ('0'*64) } }
+  if($hashes.Count -eq 0){ $sw.Stop(); return '' }
+  while($hashes.Count -gt 1){
+    $next = @(); for($i=0;$i -lt $hashes.Count;$i+=2){ $left=$hashes[$i]; $right= if($i+1 -lt $hashes.Count){ $hashes[$i+1] } else { $left }; $concatBytes=[System.Text.Encoding]::UTF8.GetBytes($left+$right); $h=$Global:HarnessSha256.ComputeHash($concatBytes); $next += (-join ($h | ForEach-Object { $_.ToString('x2') })) }; $hashes=$next }
+  $sw.Stop(); $sectionTimings["merkle_recompute_ms"]=$sw.ElapsedMilliseconds
+  return $hashes[0]
+}
+function Get-PubkeyThumbprint($pubPath){ if(-not (Test-Path $pubPath)){ return $null }; $content=Get-Content $pubPath -Raw; $b64=($content -split "\r?\n" | Where-Object { $_ -match '^\s*policy_pubkey\s*:'.* } | ForEach-Object { ($_ -split ':',2)[1].Trim() })| Select-Object -First 1; if(-not $b64){ return $null }; try { $raw=[Convert]::FromBase64String($b64); $h=$Global:HarnessSha256.ComputeHash($raw); $hex=-join ($h|ForEach-Object { $_.ToString('x2') }); return $hex.Substring(0,12) } catch { return $null } }
+
+# External compliance map placeholder (future externalization)
+$ComplianceSource="INTERNAL_DEFAULT"
+
+# Allow tests
+if($env:HARNESS_NO_EXECUTION){ return }
+
+$required = @($VerifierExe,$PolicyManifest,$PolicySignature)
+$missing=@(); foreach($p in $required){ if(-not (Test-Path $p)){ $missing += $p } }
+if($missing.Count -gt 0){ Write-Err "Missing required files: $($missing -join ', ')"; $summary=@{ VerificationStatus='FAILED'; Reason='MissingRequiredFiles'; Missing=$missing; Timestamp=(Get-Date).ToString('o') }; $failPath=Join-Path $OutputDir "verification_missing_files.json"; $summary | ConvertTo-Json -Depth 5 | Out-File $failPath -Encoding UTF8; if($Strict){ exit 2 } else { Write-Warn "Continuing in non-strict mode" } }
+
+$engineResult=@{ ExitCode=-1; VerificationStatus='FAILED'; RawOutput=''; RawError='' }
+$verifierSw=[System.Diagnostics.Stopwatch]::StartNew()
+if($missing.Count -eq 0){ Write-Info "Running verifier: $VerifierExe"; $cmdArgs=@($PolicyManifest,$PolicySignature); if(Test-Path $PubkeyFile){ $cmdArgs += $PubkeyFile }; try { $outFile=New-TemporaryFile; $errFile=New-TemporaryFile; Start-Process -FilePath $VerifierExe -ArgumentList $cmdArgs -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait; $engineResult.ExitCode=$LASTEXITCODE; $engineResult.RawOutput=(Get-Content $outFile -Raw); $engineResult.RawError=(Get-Content $errFile -Raw); Remove-Item $outFile,$errFile -Force -ErrorAction SilentlyContinue; $engineResult.VerificationStatus= if($engineResult.ExitCode -eq 0){'PASSED'} else {'FAILED'} } catch { $engineResult.RawError = "Verifier invocation exception: $_"; $engineResult.VerificationStatus='FAILED' } } else { $engineResult.RawOutput='Verifier skipped.' }
+$verifierSw.Stop(); $sectionTimings["verifier_ms"]=$verifierSw.ElapsedMilliseconds
+
+# Security: sanitize additional evidence paths
+$securityWarnings=@()
+$artifactPaths=@($PolicyManifest,$PolicySignature); if(Test-Path $PubkeyFile){ $artifactPaths += $PubkeyFile }
+if($AdditionalEvidence){
+  $rawList = $AdditionalEvidence -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+  foreach($ev in $rawList){
+    if($ev -match '\.\.' ){ $securityWarnings += "Rejected path with traversal: $ev"; continue }
+    $full = Resolve-Path -Path $ev -ErrorAction SilentlyContinue
+    if(-not $full){ $securityWarnings += "Path not found: $ev"; continue }
+    $root = Resolve-Path -Path '.'
+    if(-not ($full.Path.StartsWith($root.Path))){ $securityWarnings += "Rejected external path: $ev"; continue }
+    $artifactPaths += $ev
+  }
+}
+$artifactPaths = $artifactPaths | Where-Object { $_ -and (Test-Path $_) }
+
+$hashingSw=[System.Diagnostics.Stopwatch]::StartNew()
+$artifacts=@(); foreach($a in $artifactPaths){ $hash=Get-FileSha256 $a; $fi=Get-Item $a; $sigExtract=$null; if($a -eq $PolicySignature){ try { $sigRaw=Get-Content $a -Raw; $sigExtract=$sigRaw.Substring(0,[Math]::Min(120,$sigRaw.Length)) } catch {} }; $artifacts += [PSCustomObject]@{ path=$a; sha256=$hash; size_bytes=$fi.Length; modified_utc=$fi.LastWriteTimeUtc.ToString('o'); signature_excerpt=$sigExtract } }
+$hashingSw.Stop(); $sectionTimings["hashing_phase_ms"]=$hashingSw.ElapsedMilliseconds
+
+$recomputedRoot = if($artifacts.Count -gt 0){ Compute-MerkleRoot ($artifacts | ForEach-Object { $_.path }) } else { '' }
+$storedRoot = if(Test-Path $StoredMerkleFile){ (Get-Content $StoredMerkleFile -Raw).Trim() } else { '' }
+$rootMatch = if($storedRoot -and $recomputedRoot){ $storedRoot -eq $recomputedRoot } elseif(-not $storedRoot -and -not $recomputedRoot){ $true } else { $false }
+$merkleStatus = if($engineResult.VerificationStatus -eq 'PASSED' -and $rootMatch){ 'PASSED' } elseif($engineResult.VerificationStatus -eq 'PASSED' -and -not $rootMatch){ 'PARTIAL' } elseif($engineResult.VerificationStatus -eq 'FAILED' -and $rootMatch){ 'PARTIAL' } else { 'FAILED' }
+
+$regressionDetected=$false; if($storedRoot -and -not $rootMatch){ if($engineResult.VerificationStatus -ne 'PASSED' -or $merkleStatus -ne 'PASSED'){ $regressionDetected=$true; Write-Warn "MERKLE REGRESSION DETECTED" } }
+
+$overallStatus='FAILED'; if($engineResult.VerificationStatus -eq 'PASSED' -and $merkleStatus -eq 'PASSED'){ $overallStatus='PASSED' } elseif($engineResult.VerificationStatus -eq 'PASSED' -and $merkleStatus -ne 'PASSED'){ $overallStatus='PARTIAL' } elseif($engineResult.VerificationStatus -ne 'PASSED' -and $merkleStatus -eq 'PASSED'){ $overallStatus='PARTIAL' }
+
+# Standards rollup
+$standardList = $Standards -split ',' | Where-Object { $_ }
+$standardsRoll=@{}; foreach($std in $standardList){ $stdStatus = if($overallStatus -eq 'FAILED'){ 'FAILED' } elseif($overallStatus -eq 'PARTIAL'){ 'PARTIAL' } else { 'PASSED' }; if($stdStatus -eq 'PASSED' -and $std -in @('IEC_62443','NIS2')){ $stdStatus='PARTIAL' }; $standardsRoll[$std]=$stdStatus }
+
+# Controls mapping (simple status propagation)
+$controlSource=@{ 'GENERIC'=@{ 'Control_Integrity'='Integrity'; 'Control_Regress'='Regression Monitoring' } }
+$detailedControls=@{}; foreach($k in $controlSource.Keys){ $detailedControls[$k]=@{}; foreach($ctrl in $controlSource[$k].Keys){ $detailedControls[$k][$ctrl]= if($overallStatus -eq 'PASSED'){ 'PASSED' } elseif($overallStatus -eq 'PARTIAL'){ 'PARTIAL' } else { 'FAILED' } } }
+
+# Pubkey validation
+$pubThumb = Get-PubkeyThumbprint $PubkeyFile
+$pubkeyValidation=@{ status='UNKNOWN'; length_valid=$false; type_ed25519=$false }
+if(Test-Path $PubkeyFile){ try { $content=Get-Content $PubkeyFile -Raw; $b64=($content -split "\r?\n" | Where-Object { $_ -match '^\s*policy_pubkey\s*:' } | ForEach-Object { ($_ -split ':',2)[1].Trim() })| Select-Object -First 1; if($b64){ $raw=[Convert]::FromBase64String($b64); $pubkeyValidation.length_valid = ($raw.Length -eq 32); $pubkeyValidation.type_ed25519=$true; $pubkeyValidation.status= if($pubkeyValidation.length_valid){'VALID'} else {'INVALID'} } } catch { $pubkeyValidation.status='INVALID'; $securityWarnings += "Pubkey parse failure" } }
+
+# Schema validation
+$schemaStatus='SKIPPED'; $schemaErrors=@(); $artifactSchemaErrors=@(); if(Test-Path $SchemaPath){ try { $schema=Get-Content $SchemaPath -Raw | ConvertFrom-Json; $schemaArtifacts=@(); foreach($a in $artifacts){ $schemaArtifacts+=[PSCustomObject]@{ path=$a.path; sha256=$a.sha256; signature=$a.signature_excerpt; merkle_root_before=$storedRoot; merkle_root_after=$recomputedRoot } }; $schemaCandidate=[PSCustomObject]@{ build_id="build-$([int](Get-Date -UFormat %s))"; timestamp=(Get-Date).ToString('o'); status=($overallStatus.ToLower()); artifacts=$schemaArtifacts }; foreach($r in $schema.required){ if(-not ($schemaCandidate.PSObject.Properties.Name -contains $r)){ $schemaErrors+="Missing required top-level field '$r'" } }; if($schema.properties.artifacts.items.required){ for($i=0;$i -lt $schemaCandidate.artifacts.Count;$i++){ $art=$schemaCandidate.artifacts[$i]; foreach($req in $schema.properties.artifacts.items.required){ if(-not ($art.PSObject.Properties.Name -contains $req)){ $artifactSchemaErrors+="Artifact[$i] missing field '$req'" } } } }; if($schemaErrors.Count -eq 0 -and $artifactSchemaErrors.Count -eq 0){ $schemaStatus='PASSED' } else { $schemaStatus='FAILED' } } catch { $schemaStatus='FAILED'; $schemaErrors+="Exception parsing schema: $_" } }
+
+$report=[PSCustomObject]@{
+  VerificationID="Audit-$([int](Get-Date -UFormat %s))";
+  Timestamp=(Get-Date).ToString('o');
+  PolicyManifestID=(Split-Path $PolicyManifest -Leaf);
+  VerificationStatus=$overallStatus;
+  Summary=[PSCustomObject]@{
+    EngineExitCode=$engineResult.ExitCode;
+    SignatureAuthStatus=$engineResult.VerificationStatus;
+    MerkleChainStatus=$merkleStatus;
+    MerkleRootStored=$storedRoot;
+    MerkleRootRecomputed=$recomputedRoot;
+    MerkleRootMatch=$rootMatch;
+    EvidenceFileCount=$artifacts.Count;
+    RawEngineOutput=$engineResult.RawOutput;
+    RawEngineError=$engineResult.RawError;
+    PubkeyThumbprint=$pubThumb;
+    PubkeyValidation=$pubkeyValidation;
+    SchemaValidationStatus=$schemaStatus;
+    SchemaErrors=$schemaErrors;
+    ArtifactSchemaErrors=$artifactSchemaErrors;
+    MerkleRootPersisted=$false;
+    MerkleRootSignature='UNSIGNED';
+    RegressionDetected=$regressionDetected;
+    HarnessScriptSha256=(Get-FileSha256 $PSCommandPath);
+    HarnessExitCode=-1;
+    SecurityWarnings=$securityWarnings;
+    Timings=$sectionTimings
+  };
+  StandardsRollup=$standardsRoll;
+  ComplianceMapping=$detailedControls;
+  Artifacts=$artifacts
+}
+
+if($overallStatus -eq 'PASSED'){
+  $persistNeeded = (-not $storedRoot) -or ($storedRoot -ne $recomputedRoot)
+  if($persistNeeded -and $recomputedRoot){ try { $storeDir=Split-Path $StoredMerkleFile -Parent; if(-not (Test-Path $storeDir)){ New-Item -ItemType Directory -Force -Path $storeDir | Out-Null }; $recomputedRoot | Out-File $StoredMerkleFile -Encoding ASCII -Force; $historyFile=Join-Path $storeDir "stored_merkle_history.jsonl"; $historyEntry=@{ timestamp=(Get-Date).ToString('o'); merkle_root=$recomputedRoot; verification_id=$report.VerificationID } | ConvertTo-Json -Depth 3; Add-Content -Path $historyFile -Value $historyEntry; $report.Summary.MerkleRootPersisted=$true; Write-Info "Persisted new Merkle root" } catch { Write-Warn "Failed to persist Merkle root: $_" } }
+}
+
+if($regressionDetected){ try { $regFile=Join-Path $OutputDir 'merkle_regression_event.json'; @{ timestamp=(Get-Date).ToString('o'); stored_root=$storedRoot; recomputed_root=$recomputedRoot; verification_id=$report.VerificationID; status=$overallStatus; message='MERKLE REGRESSION DETECTED' } | ConvertTo-Json -Depth 5 | Out-File $regFile -Encoding UTF8; Write-Warn "Regression event written" } catch { Write-Warn "Failed to write regression event: $_" } }
+
+$reportPath=Join-Path $OutputDir "verification_summary.json"; $report | ConvertTo-Json -Depth 14 | Out-File $reportPath -Encoding UTF8
+$artifactsPath=Join-Path $OutputDir "verification_artifacts.json"; $artifacts | ConvertTo-Json -Depth 6 | Out-File $artifactsPath -Encoding UTF8
+
+$finalExit = if($missing.Count -gt 0){ 2 } elseif($overallStatus -eq 'PASSED'){ 0 } elseif($overallStatus -eq 'PARTIAL'){ 1 } else { 3 }
+$report.Summary.HarnessExitCode = $finalExit
+Set-Content -Path $reportPath -Value ($report | ConvertTo-Json -Depth 14) -Encoding UTF8
+
+$globalStart.Stop(); $totalMs=$globalStart.ElapsedMilliseconds; $report.Summary.Timings.total_ms=$totalMs
+if($Json){ $report | ConvertTo-Json -Depth 14 | Write-Output } else { Write-Info "Summary written: $reportPath"; if($Verbose){ Write-Host ($report | ConvertTo-Json -Depth 14) } }
+
+exit $finalExit

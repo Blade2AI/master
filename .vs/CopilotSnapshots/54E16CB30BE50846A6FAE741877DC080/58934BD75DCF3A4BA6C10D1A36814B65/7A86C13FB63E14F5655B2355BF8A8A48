@@ -1,0 +1,86 @@
+﻿[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$ManifestPath,
+
+    [switch]$Live
+)
+
+$ErrorActionPreference = 'Stop'
+
+Write-Host "=== Perform-NetworkAnchoring ===" -ForegroundColor Cyan
+Write-Host "Manifest : $ManifestPath"
+Write-Host "Live     : $($Live.IsPresent)"
+
+if (-not (Test-Path $ManifestPath)) {
+    Write-Error "Manifest not found: $ManifestPath"
+    return
+}
+
+# Compute root hash from manifest file (simple, good enough)
+$hashInfo = Get-FileHash -Path $ManifestPath -Algorithm SHA256
+$rootHash = $hashInfo.Hash
+
+$effectiveDryRun = $true
+$fallbackReasons = @()
+
+# Decide mode based on Live + guards
+if ($Live) {
+    # Must have ANCHOR_ENV=prod
+    if ($env:ANCHOR_ENV -ne 'prod') {
+        Write-Host "Guard: ANCHOR_ENV != 'prod' → forcing DRY-RUN." -ForegroundColor Yellow
+        $fallbackReasons += "ANCHOR_ENV_NOT_PROD"
+    }
+    else {
+        # Live requested and env is prod → tentatively allow live,
+        # Bundlr-level guards will be enforced inside Invoke-ArweaveAnchor.
+        $effectiveDryRun = $false
+    }
+}
+else {
+    $fallbackReasons += "LIVE_FLAG_NOT_SET"
+}
+
+if ($effectiveDryRun) {
+    Write-Host "Mode     : DRY-RUN" -ForegroundColor Yellow
+} else {
+    Write-Host "Mode     : LIVE (all high-level guards passed – Bundlr guards still apply)" -ForegroundColor Green
+}
+
+# --- Call Arweave/Bundlr wrapper (or stay dry-run) ---
+
+$txId = $null
+
+if (-not $effectiveDryRun) {
+    $invokeAr = Join-Path $PSScriptRoot "Invoke-ArweaveAnchor.ps1"
+    if (Test-Path $invokeAr) {
+        try {
+            $arRes = & $invokeAr -ManifestPath $ManifestPath
+            $txId  = $arRes.TxId
+        }
+        catch {
+            Write-Error "Invoke-ArweaveAnchor failed: $_"
+            $fallbackReasons += "ANCHOR_EXCEPTION"
+            $effectiveDryRun = $true
+        }
+    }
+    else {
+        Write-Error "Invoke-ArweaveAnchor.ps1 not found at $invokeAr"
+        $fallbackReasons += "NO_INVOKE_ARWEAVEANCHOR"
+        $effectiveDryRun = $true
+    }
+}
+
+# --- Final logging (no IPFS yet, we keep it simple) ---
+
+if (-not $effectiveDryRun -and $txId) {
+    Write-Host "Anchoring complete. TxId=$txId" -ForegroundColor Green
+    Write-Host ("[ANCHOR-LIVE-01] MODE=LIVE anchor_id={0} tx_id={1} root={2}" -f (Split-Path $ManifestPath -Leaf), $txId, $rootHash) -ForegroundColor Green
+}
+else {
+    Write-Host "Anchoring remained DRY-RUN (no network calls performed)." -ForegroundColor Yellow
+    if ($fallbackReasons.Count -gt 0) {
+        Write-Host ("Reasons  : {0}" -f ($fallbackReasons -join ", ")) -ForegroundColor DarkYellow
+    }
+    Write-Host ("[ANCHOR-LIVE-01] MODE=DRYRUN anchor_id={0} root={1}" -f (Split-Path $ManifestPath -Leaf), $rootHash) -ForegroundColor Yellow
+}

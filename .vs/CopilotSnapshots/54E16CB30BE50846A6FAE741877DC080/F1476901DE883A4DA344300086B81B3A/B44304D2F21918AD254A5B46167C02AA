@@ -1,0 +1,184 @@
+﻿# modules/Vibrational-Triad.psm1
+# Vibrational Triad: Gatherer, Filter, Advisor (minimal, stub implementations)
+
+function Invoke-VT-Gatherer {
+    [CmdletBinding()]
+    param(
+        [string]$UserId = "andy",
+        [datetime]$Now = (Get-Date),
+        [int]$Limit = 100
+    )
+
+    # Gather inputs: projects, tasks, meetings, recent SIFs (stubbed)
+    $base = "C:\BladeOps"
+    $projectsDir = Join-Path $base "Projects"
+    $items = @()
+    if (Test-Path $projectsDir) {
+        Get-ChildItem -Path $projectsDir -Filter "*.json" -ErrorAction SilentlyContinue | Select-Object -First $Limit | ForEach-Object {
+            try { $items += (Get-Content $_.FullName -Raw | ConvertFrom-Json) } catch { }
+        }
+    }
+
+    # Add some synthetic tasks if nothing found
+    if ($items.Count -eq 0) {
+        $items = @(
+            [pscustomobject]@{ id='TASK-EXAMPLE-1'; title='Administrative emails'; type='Task'; owner=$UserId },
+            [pscustomobject]@{ id='PROJ-EXAMPLE-1'; title='Reduce changeover time'; type='Project'; owner=$UserId },
+            [pscustomobject]@{ id='TASK-EXAMPLE-2'; title='Refactor auth module'; type='Task'; owner=$UserId }
+        )
+    }
+
+    return $items
+}
+
+function Invoke-VT-Filter {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [array]$Inputs
+    )
+
+    $resonance = @()
+    foreach ($item in $Inputs) {
+        $baseScore = if ($item.type -match "Project") { 7 } else { 5 }
+        $title = ($item.title -as [string])
+        if ($title -match "admin|email|paperwork|compliance") { $baseScore -= 3 }
+        if ($title -match "changeover|refactor|architecture|design") { $baseScore += 2 }
+        $score = [Math]::Max(0.0, [Math]::Round($baseScore + (Get-Random -Minimum -1 -Maximum 2),1))
+
+        $resonance += [pscustomobject]@{
+            id = ($item.id -or $item.title)
+            title = ($item.title -or "<unnamed>")
+            type = ($item.type -or "Unknown")
+            owner = ($item.owner -or $null)
+            vibration_score = $score
+            raw = $item
+        }
+    }
+
+    # Sort into buckets
+    $high = $resonance | Where-Object { $_.vibration_score -ge 7 } | Sort-Object -Property vibration_score -Descending
+    $neutral = $resonance | Where-Object { $_.vibration_score -ge 4 -and $_.vibration_score -lt 7 } | Sort-Object -Property vibration_score -Descending
+    $low = $resonance | Where-Object { $_.vibration_score -lt 4 } | Sort-Object -Property vibration_score -Descending
+
+    return @{ High=$high; Neutral=$neutral; Low=$low; All=$resonance }
+}
+
+function Invoke-VT-Advisor {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Classified,
+        [datetime]$Now = (Get-Date)
+    )
+
+    # Build simple metrics and signals
+    $metrics = [pscustomobject]@{
+        snapshot_at = $Now.ToString('o')
+        focus_index = ($Classified.High.Count)
+        context_switch_rate = 0.1
+        completion_integrity = 1.0
+        vibration_score = if ($Classified.All.Count -gt 0) { [Math]::Round(($Classified.All | Measure-Object -Property vibration_score -Average).Average,2) } else { 0 }
+    }
+
+    $signals = [pscustomobject]@{
+        meeting_seeds = @()
+        sif_flags = @()
+        truthtest_flags = @()
+        programme_targets = @()
+    }
+
+    # Populate meeting seeds from high items
+    foreach ($h in $Classified.High | Select-Object -First 5) {
+        $signals.meeting_seeds += [pscustomobject]@{
+            title = "$($h.title)";
+            type = "DAILY_CELL_STANDUP";
+            urgency = [Math]::Min(1.0, [Math]::Round(($h.vibration_score/10),2))
+        }
+    }
+
+    # Populate a simple programme target for any high project
+    foreach ($h in $Classified.High | Where-Object { $_.type -match 'Project' }) {
+        $signals.programme_targets += [pscustomobject]@{
+            project_id = $h.id
+            priority = 'HIGH'
+            reason = "High resonance + high impact"
+        }
+    }
+
+    # Populate truthtest flags if any item title matches simple heuristics
+    foreach ($a in $Classified.All) {
+        if ($a.title -match 'month|quarter|target|bonus|overtime') {
+            $signals.truthtest_flags += [pscustomobject]@{ metric = $a.title; reason = 'Potential metric gaming'; hint = 'Consider truth test' }
+        }
+    }
+
+    # SIF flags: if low bucket large and any low item is a task assigned to a worker
+    if ($Classified.Low.Count -gt 0) {
+        foreach ($l in $Classified.Low | Select-Object -First 3) {
+            $signals.sif_flags += [pscustomobject]@{
+                worker_id = ($l.owner -or 'unknown')
+                pattern = 'sustained low_vibration + potential error risk'
+                risk = 'Fatigue / accident risk'
+            }
+        }
+    }
+
+    return @{ HighResonance = $Classified.High; Neutral = $Classified.Neutral; LowResonance = $Classified.Low; Metrics = $metrics; Signals = $signals }
+}
+
+function Invoke-VibrationalTriad {
+    <#
+    .SYNOPSIS
+    Run Gatherer → Filter → Advisor and return sorted queues.
+    .OUTPUTS
+    Hashtable with:
+      - high_queue[]    # tasks to do now / soon (fish-in-water)
+      - neutral_queue[] # batch + time-box
+      - low_queue[]     # reject / automate / delegate candidates
+      - metrics{}       # focus, context switches, completion, drift
+      - signals{}       # hooks for meetings, SIF, projects, truth tests
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$UserId = 'andy',
+        [datetime]$Now = (Get-Date)
+    )
+
+    $inputs = Invoke-VT-Gatherer -UserId $UserId -Now $Now
+    $classified = Invoke-VT-Filter -Inputs $inputs
+    $advice = Invoke-VT-Advisor -Classified $classified -Now $Now
+
+    # Build output queues (convert PSObjects to simple hashtables for consumers)
+    $toSimple = {
+        param($items)
+        $items | ForEach-Object {
+            @{ id = $_.id; title = $_.title; type = $_.type; owner = $_.owner; vibration_score = $_.vibration_score }
+        }
+    }
+
+    $high_q = & $toSimple $advice.HighResonance
+    $neutral_q = & $toSimple $advice.Neutral
+    $low_q = & $toSimple $advice.LowResonance
+
+    return @{
+        high_queue = $high_q
+        neutral_queue = $neutral_q
+        low_queue = $low_q
+        metrics = $advice.Metrics
+        signals = $advice.Signals
+    }
+}
+
+function Analyze-VibrationImpact {
+    param(
+        [Parameter(Mandatory=$true)][string]$Metric
+    )
+    # Stub: return a basic analysis structure
+    return [pscustomobject]@{
+        metric = $Metric
+        impact = "UNKNOWN"
+        recommendation = "Run Invoke-VibrationalTriad and correlate with $Metric"
+    }
+}
+
+Export-ModuleMember -Function *

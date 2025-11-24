@@ -1,0 +1,44 @@
+﻿<#!
+.SYNOPSIS
+  Perform real (or dry-run) network anchoring of an anchor payload to Arweave (via Bundlr CLI) and IPFS (via nft.storage).
+.DESCRIPTION
+  Requires environment variables:
+    NFT_STORAGE_API_KEY  -> for IPFS upload
+    (optional) BUNDLR_KEY / Bundlr wallet already configured for bundlr CLI
+  This script is defensive: if required tooling or keys are absent it exits with a neutral status and leaves JSON unchanged.
+.PARAMETER AnchorJsonPath
+  Path to the GDPR-safe anchor JSON (event_anchor_*.json)
+.PARAMETER AnchorTxtPath
+  Path to the 6-line text anchor (.anchor.txt) used for dual upload
+.PARAMETER StateDir
+  Directory holding state/permanent_anchor.json
+.PARAMETER DryRun
+  If set, simulate uploads without hitting networks.
+#>
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory=$true)][string]$AnchorJsonPath,
+  [Parameter(Mandatory=$false)][string]$AnchorTxtPath,
+  [string]$StateDir='state',
+  [switch]$DryRun
+)
+$ErrorActionPreference='Stop'
+Write-Host '== Perform-NetworkAnchoring ==' -ForegroundColor Cyan
+if(-not (Test-Path $AnchorJsonPath)){ throw "Anchor JSON not found: $AnchorJsonPath" }
+if(-not (Test-Path $StateDir)){ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null }
+
+# 0) Safety-first: sign + PII guardrail (HMAC; detached receipt)
+try {
+  Write-Host '[ANCHOR] Signing + PII guardrail...' -ForegroundColor Cyan
+  python scripts/sign_anchor.py --anchor $AnchorJsonPath
+  if($LASTEXITCODE -ne 0){ throw "sign_anchor.py returned non-zero" }
+  Write-Host '[ANCHOR] Signature OK.' -ForegroundColor Green
+} catch {
+  throw "[ABORT] Anchor signing/guard failed: $_"
+}
+
+# 1) DRY RUN policy for networks unless explicitly flipped later
+if($DryRun){ Write-Host '[NET] DRY RUN active – skipping real network uploads.' -ForegroundColor Yellow; return }
+Write-Host '[POLICY] Live Bundlr/IPFS upload is DISABLED until operator flips policy.' -ForegroundColor Red
+Write-Host '         Set DryRun to continue safety-only signing/receipt.' -ForegroundColor Red
+return

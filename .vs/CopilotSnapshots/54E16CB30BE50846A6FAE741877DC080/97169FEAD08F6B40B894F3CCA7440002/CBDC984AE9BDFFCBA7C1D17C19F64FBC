@@ -1,0 +1,88 @@
+﻿# Sovereign Data Continuity Protocol v7.0 – Final Forensically-Ready Edition
+Date: 19 November 2025  
+Owner: Andy Jones
+
+> This is the single document for a court-appointed digital-forensics examiner, a CISO performing due diligence, or a successor custodian. Concise, complete, non-promotional.
+
+---
+## 1. System Overview (Workflow)
+```
+[Off-site VeraCrypt SSD] ← monthly rotation ← [Golden Master SSD (SSD2TB)]
+                                                          ↓
+                                                    PC-4 (static IP)
+                                                          ↓ SMB share
+        5 Windows PCs + TerraMaster NAS  ← daily 04:00 ←  /MIR + git verify
+                                                          ↓
+                                      Encrypted remotes (git-remote-gcrypt)
+```
+
+## 2. Golden Master
+- Device: 2 TB external SSD (serial: [appendix])
+- Host: PC-4
+- Path: `E:\COLDSTORE-SOVEREIGN-2025-11-19`
+- Type: Git repository (mandatory GPG-signed commits & tags)
+
+## 3. GPG Signing (Enforced)
+```bash
+git config --local commit.gpgsign true
+git config --local tag.gpgsign true
+git config --local user.signingkey <KEYID>
+```
+All commits and tags are signed. Verification mandatory on pull/sync.
+
+## 4. Git Rebase Advanced Techniques
+| Technique | Command | Use Case |
+|-----------|---------|----------|
+| Refresh branch | `git fetch; git rebase origin/main` | Bring dev up to date |
+| Interactive cleanup | `git rebase -i origin/main` | Squash / reorder / edit |
+| Autosquash fixups | `git commit --fixup=<sha>` → `git rebase -i --autosquash` | Clean history automatically |
+| Move branch base | `git rebase --onto main <old> dev` | Transplant feature |
+| Preserve merges | `git rebase --rebase-merges origin/main` | Retain meaningful merges |
+| Test during rebase | `git rebase -i --exec "npm test"` | CI-style gate |
+| Abort & recover | `git rebase --abort` / `git reflog + git reset --hard <ref>` | Safe rollback |
+
+Rule: **Never rebase `main` except via the nightly PC-4 promotion script.**
+
+## 5. Daily Operations
+- Work only on `dev` branch (all devices).  
+- Nightly promotion to `main` (PC-4, 03:55) – rebase + signed tag.  
+- Daily mirror (04:00) – `robocopy /MIR` + `git verify-commit` on all endpoints.
+
+## 6. Encrypted Remotes (git-remote-gcrypt)
+```bash
+git remote add nas-crypt gcrypt::/volume1/Encrypted/Sovereign.git
+git remote add offsite-crypt gcrypt::file:///F/Sovereign-Encrypted.git
+```
+Monthly push from PC-4 only.
+
+## 7. Threat Model & Residual Risk
+| Threat | Mitigation | Residual |
+|--------|------------|----------|
+| Hardware failure | Multi-device mirror + monthly off-site SSD | Very Low |
+| Ransomware | Offline master + one-way sync + GPG verification | Near Zero |
+| Theft / environmental | Off-site VeraCrypt SSD + gcrypt remote | Low |
+| Tampering | GPG-signed history + SHA-256 manifest | Near Zero |
+| Accidental deletion | Nightly authoritative mirror | Very Low |
+| Key compromise | Revocation certificate prepared | Low |
+
+## 8. Digital Forensics Tool Alignment
+- **Autopsy / Sleuth Kit:** Ingest SHA-256 manifest; validate file set.  
+- **EnCase / FTK:** Treat GPG-signed Git history as chain-of-custody timeline.  
+- **X-Ways Forensics:** Mount VeraCrypt volume read-only; correlate tags to snapshot chronology.
+
+## 9. Status – 19 November 2025
+| Component | Status |
+|-----------|--------|
+| Golden Master + manifest | Complete |
+| GPG signing | Complete |
+| git-remote-gcrypt | Complete |
+| Daily sync | Complete |
+| Off-site rotation | Pending |
+
+## 10. Signature
+Signed: **Andy Jones**  
+Date: 19 November 2025  
+(GPG-signed copy stored in repository root)
+
+---
+**Final Statement:** Master SSD + this document constitute the full continuity system. Only ongoing action: monthly off-site rotation. Forensic-grade continuity confirmed. System closed.

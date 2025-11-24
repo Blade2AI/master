@@ -1,0 +1,105 @@
+﻿# modules/SIF-Registry.psm1
+# Minimal SIF registry with vibration-aware entry creation
+
+function New-SIFEntry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Classification,
+        [Parameter(Mandatory)][int]$Severity,
+        [Parameter(Mandatory)][string]$Description
+    )
+
+    $dir = "C:\BladeOps\SIF"
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
+    $id = "SIF-{0}-{1:0000}" -f (Get-Date -Format "yyyyMMddHHmmss"), (Get-Random -Minimum 1 -Maximum 9999)
+    $entry = [pscustomobject]@{
+        id = $id
+        classification = $Classification
+        severity = $Severity
+        description = $Description
+        created_at = (Get-Date).ToString('o')
+        vibrational_context = @{}
+    }
+
+    # Attempt to sign
+    if (Get-Command -Name New-MessageSignature -ErrorAction SilentlyContinue) {
+        try {
+            $sig = New-MessageSignature -Data $entry
+            if ($sig) { $entry.signature = $sig }
+        } catch {
+            Write-Warning "SIF signing failed: $_"
+        }
+    } else {
+        Write-Host "Warning: New-MessageSignature not available — SIF entry will be unsigned" -ForegroundColor Yellow
+    }
+
+    $path = Join-Path $dir ("$id.json")
+    $tmp = "$path.tmp"
+    $entry | ConvertTo-Json -Depth 10 | Out-File $tmp -Encoding UTF8
+    Move-Item -LiteralPath $tmp -Destination $path -Force
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        $log = @{ type = 'SIF_CREATED'; message = "SIF $id created"; sif_id = $id }
+        if ($entry.PSObject.Properties.Match('signature')) { $log.signature = $entry.signature.signature }
+        Log-GovernanceEvent $log
+    }
+
+    return $entry
+}
+
+function Save-SIFEntry {
+    param([pscustomobject]$Entry)
+    $dir = "C:\BladeOps\SIF"
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $path = Join-Path $dir ("$($Entry.id).json")
+
+    # Attempt to sign if not already signed
+    if (-not $Entry.PSObject.Properties.Match('signature') -and (Get-Command -Name New-MessageSignature -ErrorAction SilentlyContinue)) {
+        try { $Entry.signature = New-MessageSignature -Data $Entry } catch { Write-Warning "SIF re-sign failed: $_" }
+    }
+
+    $tmp = "$path.tmp"
+    $Entry | ConvertTo-Json -Depth 10 | Out-File $tmp -Encoding UTF8
+    Move-Item -LiteralPath $tmp -Destination $path -Force
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        $log = @{ type = 'SIF_SAVED'; message = "SIF $($Entry.id) saved"; sif_id = $Entry.id }
+        if ($Entry.PSObject.Properties.Match('signature')) { $log.signature = $Entry.signature.signature }
+        Log-GovernanceEvent $log
+    }
+
+    return $Entry
+}
+
+function New-SIFEntryWithVibration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Classification,
+        [Parameter(Mandatory)][int]$Severity,
+        [Parameter(Mandatory)][string]$Description,
+        [string]$WorkerId
+    )
+
+    $triad = $null
+    if (Get-Command -Name Invoke-VibrationalTriad -ErrorAction SilentlyContinue) {
+        try { $triad = Invoke-VibrationalTriad -UserId $WorkerId } catch { }
+    }
+
+    $entry = New-SIFEntry -Classification $Classification -Severity $Severity -Description $Description
+
+    if ($triad) {
+        $entry.vibrational_context = @{ 
+            worker_id = $WorkerId
+            recent_vibration = $triad.metrics.vibration_score
+            low_vibe_task_count = ($triad.low_queue | Measure-Object).Count
+            context_switch_rate = $triad.metrics.context_switch_rate
+            completion_integrity = $triad.metrics.completion_integrity
+        }
+        Save-SIFEntry -Entry $entry | Out-Null
+    }
+
+    return $entry
+}
+
+Export-ModuleMember -Function *

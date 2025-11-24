@@ -1,0 +1,14 @@
+# One repository per line. Format:
+# <git_url> [target_subdir_name]
+# Lines starting with # are ignored.
+
+# Example: current repository
+https://github.com/PrecisePointway/master master
+
+# Add more:
+# https://github.com/ORG/REPO_NAME optional-folder-name
+# Added from GitHub 2025-11-19T07:35:45.9233711+00:00
+https://github.com/PrecisePointway/boardroom.git boardroom
+https://github.com/PrecisePointway/master.git master
+https://github.com/PrecisePointway/vllm.git vllm
+https://github.com/PrecisePointway/WiFi-Network-Analysis.git WiFi-Network-Analysis

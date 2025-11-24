@@ -1,0 +1,87 @@
+﻿Param(
+    [string]$Root = "C:\Users\andyj\AI_Agent_Research",
+    [string]$Output = "dependency_manifest.json"
+)
+
+Write-Host "=== SOVEREIGN DEPENDENCY MANIFEST ===" -ForegroundColor Cyan
+Write-Host "Root:   $Root"
+Write-Host "Output: $Output`n"
+
+if (-not (Test-Path $Root)) {
+    Write-Host "Root path not found: $Root" -ForegroundColor Red
+    exit 1
+}
+
+$manifest = [ordered]@{
+    generated_at = (Get-Date).ToString("s")
+    root         = $Root
+    dotnet       = @()
+    python       = @()
+    node         = @()
+}
+
+# 1) C# / .NET projects (.csproj)
+Write-Host "[1] Collecting .csproj files..." -ForegroundColor Yellow
+Get-ChildItem -Path $Root -Recurse -Filter *.csproj -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        $rel = $_.FullName.Substring($Root.Length+1)
+        # attempt to extract TargetFramework and PackageReference
+        $entry = [ordered]@{
+            name = $_.BaseName
+            path = $rel
+            targetFramework = ''
+            packages = @()
+        }
+        try {
+            $xml = [xml](Get-Content -LiteralPath $_.FullName -Raw)
+            $tf = ($xml.Project.PropertyGroup.TargetFramework, $xml.Project.PropertyGroup.TargetFrameworks | Where-Object { $_ }) -join ';'
+            $entry.targetFramework = $tf
+            $pkgRefs = $xml.Project.ItemGroup.PackageReference | ForEach-Object { "${($_.Include)}:${($_.Version)}" }
+            $entry.packages = $pkgRefs
+        } catch {
+            Write-Host "  ⚠️ Failed to parse $rel as XML" -ForegroundColor DarkYellow
+        }
+        $manifest.dotnet += $entry
+    }
+
+# 2) Python environments (requirements.txt)
+Write-Host "[2] Collecting requirements.txt..." -ForegroundColor Yellow
+Get-ChildItem -Path $Root -Recurse -Filter requirements.txt -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        $rel = $_.FullName.Substring($Root.Length+1)
+        $lines = Get-Content $_.FullName | Where-Object {
+            $_ -and (-not $_.Trim().StartsWith("#"))
+        }
+
+        $manifest.python += [ordered]@{
+            path     = $rel
+            packages = $lines
+        }
+    }
+
+# 3) Node / JS projects (package.json)
+Write-Host "[3] Collecting package.json..." -ForegroundColor Yellow
+Get-ChildItem -Path $Root -Recurse -Filter package.json -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        $rel = $_.FullName.Substring($Root.Length+1)
+        try {
+            $raw = Get-Content $_.FullName -Raw
+            $pkg = $raw | ConvertFrom-Json
+
+            $manifest.node += [ordered]@{
+                path            = $rel
+                name            = $pkg.name
+                version         = $pkg.version
+                dependencies    = $pkg.dependencies
+                devDependencies = $pkg.devDependencies
+            }
+        } catch {
+            Write-Host "  ⚠️ Failed to parse $rel as JSON" -ForegroundColor DarkYellow
+        }
+    }
+
+# 4) Write manifest
+$outPath = Join-Path $Root $Output
+$manifest | ConvertTo-Json -Depth 10 | Set-Content $outPath -Encoding utf8
+
+Write-Host "`n✅ Dependency manifest written to $outPath" -ForegroundColor Green

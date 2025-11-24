@@ -1,0 +1,380 @@
+﻿<#
+Start-LiveShare-Host.ps1 - Production Host with Fleet Management
+🌐 "In a world you can be anything – be nice."
+
+Enhanced host session with auto-discovery, network monitoring, and kindness
+Integrates with fleet profile for consistent configuration across all PCs
+#>
+
+[CmdletBinding()]
+param(
+    [switch]$AutoDiscover,
+    [switch]$DetailedMetrics,
+    [switch]$AutoNotify,
+    [string]$SlackWebhook = "",
+    [string]$WorkspacePath = $PSScriptRoot
+)
+
+# Load fleet configuration
+$fleetProfile = Join-Path $PSScriptRoot "fleet-profile.ps1"
+if (Test-Path $fleetProfile) {
+    . $fleetProfile
+} else {
+    Write-Warning "Fleet profile not found. Using local configuration."
+    $Global:PcList = @('pc-1','pc-2','pc-3','pc-4')
+    $Global:Motto = "🌐 In a world you can be anything – be nice."
+    $Global:LogsRoot = Join-Path $env:USERPROFILE "LiveShareLogs"
+    $Global:LatencyThresholds = @{ Excellent = 5; Good = 15; Fair = 50 }
+}
+
+# Ensure log directory exists
+if (!(Test-Path $Global:LogsRoot)) { New-Item -ItemType Directory -Path $Global:LogsRoot | Out-Null }
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logFile = Join-Path $Global:LogsRoot "LiveShare_Host_$timestamp.log"
+$linkFile = Join-Path "\\dxp4800plus-67ba\ops" "LiveShareLink.txt"
+$statusFile = Join-Path "\\dxp4800plus-67ba\ops" "LiveShareStatus.json"
+
+# Enhanced logging with motto integration
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $time = Get-Date -Format "HH:mm:ss"
+    $entry = "[$time] [$Level] $Message"
+    Write-Host $entry -ForegroundColor $(switch($Level) { "ERROR" {"Red"} "WARN" {"Yellow"} "SUCCESS" {"Green"} "MOTTO" {"Magenta"} default {"White"} })
+    Add-Content -Path $logFile -Value $entry
+}
+
+# Display motto with collaborative spirit
+Write-Log $Global:Motto "MOTTO"
+Write-Log "🤝 Starting collaborative C++14 development session..." "MOTTO"
+
+# Fleet-aware network discovery and monitoring
+function Get-FleetLatencyMap {
+    param([switch]$IncludeJitter)
+    
+    Write-Log "📊 Measuring fleet network performance with care..." "INFO"
+    $latencyMap = @{}
+    
+    foreach ($pc in $Global:PcList) {
+        if ($pc -eq $env:COMPUTERNAME) { continue }
+        
+        try {
+            Write-Log "  🏓 Testing connection to $pc"
+            $pingResults = Test-Connection -ComputerName $pc -Count 4 -ErrorAction SilentlyContinue
+            
+            if ($pingResults) {
+                $responseTimes = $pingResults | ForEach-Object { $_.ResponseTime }
+                $avgLatency = ($responseTimes | Measure-Object -Average).Average
+                $minLatency = ($responseTimes | Measure-Object -Minimum).Minimum
+                $maxLatency = ($responseTimes | Measure-Object -Maximum).Maximum
+                
+                $metrics = @{
+                    PC = $pc
+                    Average = [math]::Round($avgLatency, 2)
+                    Minimum = $minLatency
+                    Maximum = $maxLatency
+                    PacketLoss = 0
+                    Quality = ""
+                    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                    Reachable = $true
+                }
+                
+                # Calculate jitter if requested
+                if ($IncludeJitter -and $responseTimes.Count -gt 1) {
+                    $jitter = 0
+                    for ($i = 1; $i -lt $responseTimes.Count; $i++) {
+                        $jitter += [math]::Abs($responseTimes[$i] - $responseTimes[$i-1])
+                    }
+                    $metrics.Jitter = [math]::Round($jitter / ($responseTimes.Count - 1), 2)
+                }
+                
+                # Determine quality based on fleet thresholds
+                $quality = if ($avgLatency -lt $Global:LatencyThresholds.Excellent) { "Excellent" } 
+                          elseif ($avgLatency -lt $Global:LatencyThresholds.Good) { "Good" } 
+                          elseif ($avgLatency -lt $Global:LatencyThresholds.Fair) { "Fair" } 
+                          else { "Poor" }
+                
+                if ($metrics.Jitter -and $metrics.Jitter -gt 10) {
+                    $quality += " (High Jitter)"
+                }
+                
+                $metrics.Quality = $quality
+                $latencyMap[$pc] = $metrics
+                
+                $jitterText = if ($metrics.Jitter) { ", jitter: $($metrics.Jitter)ms" } else { "" }
+                $color = if ($avgLatency -lt $Global:LatencyThresholds.Good) { "SUCCESS" } 
+                        elseif ($avgLatency -lt $Global:LatencyThresholds.Fair) { "WARN" } 
+                        else { "ERROR" }
+                
+                Write-Log "  📈 $pc : ${avgLatency}ms avg, ${minLatency}-${maxLatency}ms range ($quality)$jitterText" $color
+                
+            } else {
+                $latencyMap[$pc] = @{
+                    PC = $pc
+                    Average = $null
+                    PacketLoss = 100
+                    Quality = "Unreachable"
+                    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                    Reachable = $false
+                }
+                Write-Log "  ❌ $pc : Unreachable - extending patience and understanding" "WARN"
+            }
+            
+        } catch {
+            $latencyMap[$pc] = @{
+                PC = $pc
+                Average = $null
+                PacketLoss = 100
+                Quality = "Error"
+                Error = $_.Exception.Message
+                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                Reachable = $false
+            }
+            Write-Log "  ❌ Failed to test $pc : $_" "ERROR"
+        }
+    }
+    
+    return $latencyMap
+}
+
+# Performance metrics collection
+function Get-HostPerformanceSnapshot {
+    try {
+        $perf = Get-Counter '\Processor(_Total)\% Processor Time','\Memory\Available MBytes' -SampleInterval 1 -MaxSamples 1 -ErrorAction SilentlyContinue
+        
+        return @{
+            Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            CPU_Percent = if ($perf) { [math]::Round(100 - $perf.CounterSamples[0].CookedValue, 1) } else { $null }
+            MemoryFreeMB = if ($perf) { [math]::Round($perf.CounterSamples[1].CookedValue, 0) } else { $null }
+            Host = $env:COMPUTERNAME
+        }
+    } catch {
+        Write-Log "Performance snapshot unavailable: $_" "WARN"
+        return $null
+    }
+}
+
+try {
+    Write-Log "▶️ Starting Live Share host bootstrap on $env:COMPUTERNAME" "SUCCESS"
+    
+    # Fleet discovery if requested
+    if ($AutoDiscover) {
+        Write-Log "🔍 Auto-discovering fleet PCs with hope..." "INFO"
+        $fleetLatency = Get-FleetLatencyMap -IncludeJitter:$DetailedMetrics
+        
+        Write-Log ""
+        Write-Log "📊 Fleet Network Performance Summary:" "SUCCESS"
+        Write-Log "🤝 Building bridges of collaboration with optimal performance..." "MOTTO"
+        
+        $reachablePCs = ($fleetLatency.Values | Where-Object { $_.Reachable }).Count
+        $totalPCs = $Global:PcList.Count - 1  # Exclude self
+        
+        Write-Log "   Fleet Status: $reachablePCs/$totalPCs PCs reachable" $(if ($reachablePCs -eq $totalPCs) { "SUCCESS" } else { "WARN" })
+        
+        foreach ($pc in ($fleetLatency.Keys | Sort-Object)) {
+            $metrics = $fleetLatency[$pc]
+            if ($metrics.Reachable) {
+                $latency = $metrics.Average
+                Write-Log "   $pc : ${latency}ms avg ($($metrics.Quality))" $(if ($latency -lt $Global:LatencyThresholds.Good) { "SUCCESS" } elseif ($latency -lt $Global:LatencyThresholds.Fair) { "WARN" } else { "ERROR" })
+            } else {
+                Write-Log "   $pc : $($metrics.Quality)" "ERROR"
+            }
+        }
+    }
+    
+    # Performance snapshot if detailed metrics requested
+    $hostPerformance = $null
+    if ($DetailedMetrics) {
+        Write-Log "📊 Capturing host performance snapshot..." "INFO"
+        $hostPerformance = Get-HostPerformanceSnapshot
+        
+        if ($hostPerformance) {
+            Write-Log "   CPU Usage: $($hostPerformance.CPU_Percent)%" "INFO"
+            Write-Log "   Available Memory: $($hostPerformance.MemoryFreeMB)MB" "INFO"
+        }
+    }
+    
+    # Launch VS Code with workspace
+    Write-Log "🚀 Launching VS Code with collaborative workspace" "INFO"
+    Write-Log "💻 Opening the door to collaborative C++14 development..." "MOTTO"
+    
+    if ($WorkspacePath -and (Test-Path $WorkspacePath)) {
+        Start-Process code -ArgumentList "`"$WorkspacePath`""
+    } else {
+        Start-Process code
+    }
+    
+    # Wait for VS Code initialization
+    Write-Log "⏳ Waiting for VS Code and Live Share to initialize..."
+    Start-Sleep -Seconds 15
+    
+    # Verify Live Share extension
+    $liveShareCheck = & code --list-extensions 2>$null | Where-Object { $_ -match "ms-vsliveshare" }
+    if (-not $liveShareCheck) {
+        Write-Log "❌ Live Share extension not found. Installing with care..." "ERROR"
+        & code --install-extension ms-vsliveshare.vsliveshare --force
+        Start-Sleep -Seconds 10
+    }
+    
+    # Start Live Share session
+    Write-Log "🔗 Starting Live Share session..." "INFO"
+    Write-Log "🌟 Creating a space where collaboration flourishes..." "MOTTO"
+    
+    $sessionResult = & code --command liveshare.start 2>&1
+    Start-Sleep -Seconds 10
+    
+    # Retrieve session link with patience
+    Write-Log "📋 Retrieving Live Share session link..."
+    $linkRetrieved = $false
+    $attempts = 0
+    $maxAttempts = 6
+    
+    while (-not $linkRetrieved -and $attempts -lt $maxAttempts) {
+        $attempts++
+        try {
+            # Check clipboard for Live Share link
+            Add-Type -AssemblyName System.Windows.Forms
+            $clipboardText = [System.Windows.Forms.Clipboard]::GetText()
+            if ($clipboardText -match 'https://[^\s]*liveshare[^\s]*') {
+                $link = $Matches[0]
+                $linkRetrieved = $true
+            }
+        } catch {
+            Write-Log "Attempt $attempts: $_" "WARN"
+        }
+        
+        if (-not $linkRetrieved) {
+            Write-Log "⏳ Waiting for Live Share link... (attempt $attempts/$maxAttempts)"
+            Start-Sleep -Seconds 10
+        }
+    }
+    
+    if ($linkRetrieved) {
+        Write-Log "🔗 Live Share link retrieved: $link" "SUCCESS"
+        Write-Log "🎁 Sharing the gift of collaboration..." "MOTTO"
+        
+        # Write link to NAS
+        Set-Content -Path $linkFile -Value $link -Encoding ASCII
+        Write-Log "💾 Link written to fleet coordination point"
+        
+        # Create comprehensive fleet status
+        $fleetStatus = @{
+            Status = "Active"
+            Link = $link
+            Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            Host = $env:COMPUTERNAME
+            Workspace = $WorkspacePath
+            FleetLatencies = if ($AutoDiscover) { $fleetLatency } else { $null }
+            HostPerformance = $hostPerformance
+            NetworkOptimized = $true
+            ConnectionMode = "direct"
+            CppStandard = $Global:CppStandard
+            Motto = $Global:Motto
+            CollaborationSpirit = "Kindness-driven development"
+            FleetSize = $Global:PcList.Count
+        }
+        
+        $fleetStatus | ConvertTo-Json -Depth 5 | Set-Content $statusFile -Encoding UTF8
+        Write-Log "📊 Fleet status updated with comprehensive metrics"
+        
+        # Send fleet notification if configured
+        if ($AutoNotify -and $SlackWebhook) {
+            try {
+                $reachableCount = if ($fleetLatency) { ($fleetLatency.Values | Where-Object { $_.Reachable }).Count } else { "Unknown" }
+                $avgLatency = if ($fleetLatency) { 
+                    $reachableLatencies = $fleetLatency.Values | Where-Object { $_.Reachable -and $_.Average }
+                    if ($reachableLatencies) { [math]::Round(($reachableLatencies.Average | Measure-Object -Average).Average, 1) } else { "N/A" }
+                } else { "N/A" }
+                
+                $payload = @{
+                    text = "🚂 **Live Share Fleet Session Started!**`n" +
+                           "🌐 *$($Global:Motto)*`n`n" +
+                           "**Host:** $env:COMPUTERNAME`n" +
+                           "**Fleet Status:** $reachableCount/$($Global:PcList.Count - 1) PCs ready`n" +
+                           "**Avg Latency:** ${avgLatency}ms`n" +
+                           "**Mode:** Direct LAN (Optimized)`n" +
+                           "**C++ Standard:** $($Global:CppStandard)`n" +
+                           "**Link:** $link`n`n" +
+                           "🤝 **Ready for collaborative C++ development!**"
+                } | ConvertTo-Json
+                
+                Invoke-RestMethod -Uri $SlackWebhook -Method Post -Body $payload -ContentType "application/json"
+                Write-Log "📣 Fleet notification sent with collaborative spirit" "SUCCESS"
+            } catch {
+                Write-Log "Failed to send fleet notification: $_" "WARN"
+            }
+        }
+        
+        Write-Log ""
+        Write-Log "✅ Live Share fleet host is ready!" "SUCCESS"
+        Write-Log "🌟 Welcome to a collaboration space built with kindness..." "MOTTO"
+        Write-Log "   - Host: $env:COMPUTERNAME"
+        Write-Log "   - Fleet Size: $($Global:PcList.Count) PCs"
+        Write-Log "   - Connection Mode: Direct LAN (Optimized)"
+        Write-Log "   - C++ Standard: $($Global:CppStandard)"
+        Write-Log "   - Collaboration Spirit: Kindness-driven development"
+        Write-Log ""
+        Write-Log "🤝 Remember: In this collaborative space, we approach every challenge with kindness..."
+        Write-Log "Press Ctrl+C to gracefully end the session"
+        
+        # Keep session alive with fleet monitoring
+        while ($true) {
+            Start-Sleep -Seconds 300  # 5-minute intervals
+            
+            try {
+                # Check session status
+                $sessionStatus = & code --command liveshare.showSessionDetails 2>$null
+                if (-not $sessionStatus -or $sessionStatus -match "No active session") {
+                    Write-Log "🔴 Live Share session appears to have ended" "WARN"
+                    break
+                }
+                
+                # Update fleet metrics periodically
+                Write-Log "🔄 Updating fleet metrics with care..."
+                $updatedLatency = Get-FleetLatencyMap -IncludeJitter:$DetailedMetrics
+                $updatedPerformance = Get-HostPerformanceSnapshot
+                
+                $fleetStatus.FleetLatencies = $updatedLatency
+                $fleetStatus.HostPerformance = $updatedPerformance
+                $fleetStatus.LastUpdated = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                
+                $fleetStatus | ConvertTo-Json -Depth 5 | Set-Content $statusFile -Encoding UTF8
+                
+            } catch {
+                # Continue gracefully if monitoring fails
+                Write-Log "Fleet monitoring update encountered minor issue: $_" "WARN"
+            }
+        }
+        
+    } else {
+        Write-Log "❌ Failed to retrieve Live Share link after $maxAttempts attempts" "ERROR"
+        Write-Log "💡 Try starting Live Share manually in VS Code - patience brings solutions" "INFO"
+    }
+    
+} catch {
+    Write-Log "❌ An error occurred: $_" "ERROR"
+    Write-Log $_.ScriptStackTrace "ERROR"
+    Write-Log "🌐 Even in challenges, we maintain our kindness." "MOTTO"
+} finally {
+    # Graceful cleanup
+    Write-Log "🏁 Host session ending with gratitude" "INFO"
+    Write-Log $Global:Motto "MOTTO"
+    Write-Log "🙏 Thank you for choosing collaboration with kindness." "MOTTO"
+    
+    try {
+        & code --command liveshare.end 2>$null
+        if (Test-Path $linkFile) { Remove-Item $linkFile -Force }
+        
+        $finalStatus = @{
+            Status = "Stopped"
+            Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            Host = $env:COMPUTERNAME
+            Motto = $Global:Motto
+            FinalMessage = "Session ended with gratitude and kindness."
+        }
+        $finalStatus | ConvertTo-Json | Set-Content $statusFile -Encoding UTF8
+        
+    } catch {
+        # Silent cleanup
+    }
+}

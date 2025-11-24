@@ -1,0 +1,18 @@
+﻿#pragma once
+
+#include <string>
+#include <vector>
+
+// Compute SHA256 of input data (uses libsodium when available in implementation)
+std::vector<unsigned char> compute_sha256(const std::string &data);
+
+// Compute Merkle root hex string for a list of file paths
+std::string compute_merkle_root_from_files(const std::vector<std::string>& paths);
+
+// Load public key from file (hex or raw). Returns empty vector on error and sets err message.
+std::vector<unsigned char> load_pubkey_from_file(const std::string &path, std::string &err);
+
+// Verify Ed25519 signature (requires libsodium at link-time). Returns true if valid.
+bool verify_signature_ed25519(const std::vector<unsigned char>& pubkey,
+                              const std::vector<unsigned char>& sig,
+                              const std::string& message);

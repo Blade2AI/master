@@ -1,0 +1,99 @@
+﻿<#
+.SYNOPSIS
+  Dual-anchor a ledger snapshot: compute root hash, emit GDPR-safe anchor JSON,
+  and prepare for Arweave (Bundlr) + IPFS (nft.storage) upload.
+
+.DESIGN CONSTRAINTS (GDPR):
+  - No personal data ever leaves the controlled ledger store.
+  - Anchor JSON contains ONLY:
+      - root_hash, hash_algorithm
+      - pseudonymous node_id
+      - timestamp_utc
+      - backend receipts (tx_id, cid)
+      - signature over the anchor record
+  - Event content stays in mutable storage with retention controls.
+
+DEPENDENCIES (expected by future expansion):
+  - JSON schema validator for schemas/event_anchor.json
+  - Bundlr client for Arweave
+  - nft.storage client for IPFS
+
+SECRETS:
+  - BUNDLR_KEY (env var)
+  - NFT_STORAGE_API_KEY (env var)
+#>
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory=$true)][string]$LedgerPath,
+  [string]$OutputDir = 'out/anchors',
+  [string]$SchemaPath = 'schemas/event_anchor.json',
+  [string]$Environment = 'proof'
+)
+$ErrorActionPreference='Stop'
+Write-Host '== Seal-And-Anchor-Dual : STUB ==' -ForegroundColor Cyan
+Write-Host "Ledger:      $LedgerPath"
+Write-Host "OutputDir:   $OutputDir"
+Write-Host "SchemaPath:  $SchemaPath"
+Write-Host "Environment: $Environment"
+Write-Host ''
+
+if(-not (Test-Path $LedgerPath)){ throw "LedgerPath not found: $LedgerPath" }
+if(-not (Test-Path $OutputDir)){ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null }
+
+# 1. Compute root hash (placeholder: sha256 of file; future: Merkle root)
+$ledgerHash = Get-FileHash -LiteralPath $LedgerPath -Algorithm SHA256
+$rootHash = $ledgerHash.Hash.ToLower()
+Write-Host "Computed root hash (sha256): $rootHash"
+
+# 2. Construct GDPR-safe anchor object
+$anchorId = [guid]::NewGuid().ToString()
+$timestampUtc = (Get-Date).ToUniversalTime().ToString('o')
+$nodeId = $env:SOVEREIGN_NODE_ID; if(-not $nodeId){ $nodeId='node-unknown' }
+$anchor = [ordered]@{
+  schema_version = '1.0.0'
+  anchor_id      = $anchorId
+  node_id        = $nodeId
+  root_hash      = $rootHash
+  hash_algorithm = 'sha256'
+  timestamp_utc  = $timestampUtc
+  backends       = [ordered]@{
+    arweave = [ordered]@{ enabled=$true; tx_id=$null; bundlr_node=$null }
+    ipfs    = [ordered]@{ enabled=$true; cid=$null; provider=$null }
+  }
+  signature      = [ordered]@{ alg='ed25519'; key_id=$env:SOVEREIGN_SIGNING_KEY_ID; value=$null }
+  meta           = [ordered]@{ backend_version='flight-recorder-1.0.0'; environment=$Environment }
+}
+
+# 3. Write pre-upload anchor JSON
+$anchorFileName = "event_anchor_$anchorId.json"
+$anchorPath = Join-Path $OutputDir $anchorFileName
+$anchor | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $anchorPath -Encoding UTF8
+Write-Host "Anchor stub written: $anchorPath" -ForegroundColor Green
+
+# 4. Validate against schema (placeholder)
+if(Test-Path $SchemaPath){
+  Write-Host "TODO: Validate $anchorPath against $SchemaPath (jsonschema / ajv)" -ForegroundColor Yellow
+} else {
+  Write-Host "WARNING: Schema not found at $SchemaPath. Skipping validation." -ForegroundColor Yellow
+}
+
+# 5. Network anchoring STUB
+Write-Host ''
+Write-Host 'NETWORK ANCHORING NOT IMPLEMENTED (STUB ONLY)' -ForegroundColor Yellow
+Write-Host 'Next steps:' -ForegroundColor Yellow
+Write-Host '  - Read BUNDLR_KEY from env (no disk).'
+Write-Host '  - Upload ANCHOR-ONLY payload to Bundlr → populate backends.arweave.tx_id'
+Write-Host '  - Upload same payload to nft.storage → populate backends.ipfs.cid'
+Write-Host '  - Sign updated JSON → set signature.value'
+Write-Host '  - Re-validate against schema and emit recorder event_anchor'
+
+Write-Host ''
+Write-Host 'GDPR NOTE:' -ForegroundColor Green
+Write-Host '  Only root_hash + technical metadata may be anchored.'
+Write-Host '  No personal identifiers or free-text allowed.'
+
+Write-Host ''
+Write-Host 'Human checkpoint:' -ForegroundColor Cyan
+Write-Host '  - Bundlr wallet funded (MATIC)'
+Write-Host '  - nft.storage API key set in environment'
+Write-Host '  - Screenshots of first tx_id + cid captured'

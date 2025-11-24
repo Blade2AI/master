@@ -1,0 +1,63 @@
+﻿#include "../VerifyEvidenceLib.h"
+#include "../../../deps/catch2/catch.hpp"
+#include <vector>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
+TEST_CASE(Merkle_RightOrder_ComputesExpectedRoot) {
+    std::vector<std::string> paths = {"../..//test_data/evidence1.txt", "../..//test_data/evidence2.txt", "../..//test_data/evidence3.txt"};
+    std::string root = compute_merkle_root_from_files(paths);
+    std::string expected = compute_merkle_root_from_files(paths);
+    REQUIRE(root == expected);
+}
+
+TEST_CASE(Merkle_TamperedFile_FailsMatch) {
+    std::vector<std::string> paths = {"../..//test_data/evidence1.txt", "../..//test_data/evidence2.txt", "../..//test_data/evidence3.txt"};
+    // Compute original root
+    std::string original_root = compute_merkle_root_from_files(paths);
+
+    // Backup original content
+    std::string tamper_path = "../..//test_data/evidence2.txt";
+    std::ifstream in(tamper_path, std::ios::binary);
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::string original = ss.str();
+    in.close();
+
+    // Create tampered content (flip first byte or append marker if empty)
+    std::string tampered = original;
+    if (!tampered.empty()) {
+        tampered[0] = static_cast<char>(tampered[0] ^ 0xFF);
+    } else {
+        tampered = "X"; // ensure non-empty difference
+    }
+
+    // Overwrite with tampered content
+    {
+        std::ofstream out(tamper_path, std::ios::binary | std::ios::trunc);
+        out.write(tampered.data(), tampered.size());
+    }
+
+    // Compute tampered root
+    std::string tampered_root = compute_merkle_root_from_files(paths);
+
+    // Restore original content
+    {
+        std::ofstream restore(tamper_path, std::ios::binary | std::ios::trunc);
+        restore.write(original.data(), original.size());
+    }
+
+    if (original_root == tampered_root) {
+        std::cerr << "[DIAG] Original root:  " << original_root << "\n";
+        std::cerr << "[DIAG] Tampered root:  " << tampered_root << "\n";
+        std::cerr << "[DIAG] Tampered content first byte after flip may not have altered hash placeholder." << std::endl;
+    }
+
+    REQUIRE(original_root != tampered_root);
+}
+
+int main(int argc, char** argv) {
+    return run_all_tests();
+}

@@ -1,0 +1,296 @@
+# Live Share 4-PC Development Setup Guide
+
+This guide sets up automated Visual Studio Live Share collaboration across your 4-PC development environment with **LAN-optimized direct connections** and comprehensive network monitoring for C++14 development.
+
+## ??? Architecture Overview
+
+- **Host PC (PC4)**: Runs the main development session and shares via Live Share with LAN optimization
+- **Guest PCs (PC1-PC3)**: Join the Live Share session using direct LAN connections
+- **NAS Storage**: Central coordination point for session links, status, and network metrics
+- **Fleet Management**: Automated deployment and management via PowerShell
+- **Network Optimization**: Direct P2P connections with real-time latency monitoring
+
+## ?? Prerequisites
+
+### All PCs
+1. **Visual Studio Code** installed
+2. **Live Share Extension** (will be auto-installed by scripts)
+3. **Git** installed and configured
+4. **PowerShell 5.1+** 
+5. **Network access** to NAS at `\\dxp4800plus-67ba\ops`
+6. **C++ Build Tools** for Visual Studio (for C++14 compilation)
+7. **Windows Firewall configured** for Live Share direct connections
+
+### Host PC Only
+8. **Repository clone** at designated location
+9. **Elevated PowerShell access** for initial setup
+
+## ?? Quick Start
+
+### 1. Deploy Fleet Configuration with LAN Optimization
+
+On the **Host PC**, run:
+```powershell
+# Deploy Live Share setup with full LAN optimization
+.\scripts\Deploy-LiveShare-Fleet.ps1 -InstallLiveShare -SetupTasks -OptimizeLAN
+```
+
+This will:
+- Install Live Share extension on all PCs
+- Configure direct LAN connections (no relay servers)
+- Set up optimized VS Code settings
+- Configure Windows Firewall rules
+- Create desktop shortcuts
+
+### 2. Start Optimized Host Session
+
+**Option A: VS Code Task**
+1. Open VS Code in your workspace
+2. `Ctrl+Shift+P` ? "Tasks: Run Task"
+3. Select "LiveShare: Start Host Session"
+
+**Option B: PowerShell**
+```powershell
+.\scripts\Start-LiveShare-Host.ps1 -AutoNotify
+```
+
+**Option C: Desktop Shortcut**
+- Double-click "Start Live Share Host (LAN Optimized)" shortcut
+
+### 3. Join from Guest PCs with LAN Optimization
+
+**Option A: VS Code Task**
+1. Open VS Code 
+2. `Ctrl+Shift+P` ? "Tasks: Run Task"
+3. Select "LiveShare: Join Session"
+
+**Option B: Desktop Shortcut**
+- Double-click "Join Live Share (LAN Optimized)" shortcut on desktop
+
+**Option C: PowerShell**
+```powershell
+C:\ops\LiveShare\Join-LiveShare-Guest.ps1 -AutoOpen -ForceLANMode
+```
+
+## ??? Available VS Code Tasks
+
+| Task Name | Description | Optimization |
+|-----------|-------------|--------------|
+| **LiveShare: Start Host Session** | Start hosting with LAN optimization | ? Direct LAN |
+| **LiveShare: Join Session** | Join with automatic LAN configuration | ? Direct LAN |
+| **LiveShare: Quick Join (Read from NAS)** | One-click join using NAS link | ? Direct LAN |
+| **LiveShare: Check Session Status** | View session + network metrics | ? Latency info |
+| **Build: C++ Debug** | Build project in Debug mode with C++14 | ? Optimized |
+| **Build: C++ Release** | Build project in Release mode with C++14 | ? Optimized |
+| **Fleet: Deploy LiveShare Setup** | Deploy fleet automation | ? LAN config |
+| **Collab: Start (Pull + Open + Live Share)** | Legacy workflow integration | ? Enhanced |
+| **Collab: End (Commit + Push)** | Commit and push changes | - |
+
+## ?? File Structure
+
+```
+PrecisePointway/master/
+??? .vscode/
+?   ??? tasks.json              # VS Code tasks (LAN optimized)
+?   ??? settings.json           # Auto-configured LAN settings
+??? scripts/
+?   ??? Start-LiveShare-Host.ps1    # Host with latency monitoring
+?   ??? Join-LiveShare-Guest.ps1    # Guest with LAN optimization  
+?   ??? Deploy-LiveShare-Fleet.ps1  # Fleet deployment (enhanced)
+?   ??? Start-Collab.ps1           # Legacy collab start
+?   ??? End-Collab.ps1             # Legacy collab end
+??? docs/
+?   ??? LiveShare-Setup.md          # This guide
+??? PrecisePointway.sln             # Clean C++14 solution
+??? PrecisePointway.vcxproj         # Clean C++14 project
+```
+
+## ?? Configuration Files
+
+### NAS Coordination Files
+- `\\dxp4800plus-67ba\ops\LiveShareStatus.json` - Session status with network metrics
+- `\\dxp4800plus-67ba\ops\LiveShareLink.txt` - Current session link
+- `\\dxp4800plus-67ba\ops\guest-[PC]-status.json` - Individual guest connection info
+
+### Auto-Generated VS Code Settings
+```json
+{
+  "liveshare.connectionMode": "direct",
+  "liveshare.allowGuestDebugControl": true,
+  "liveshare.allowGuestTaskControl": true,
+  "liveshare.guestApprovalRequired": false,
+  "C_Cpp.default.cppStandard": "c++14",
+  "C_Cpp.default.intelliSenseMode": "windows-msvc-x64"
+}
+```
+
+### Local Logs
+- `%USERPROFILE%\LiveShareLogs\` - Session logs with network metrics
+
+## ?? Workflow Examples
+
+### Typical Development Session with LAN Optimization
+
+1. **Host starts optimized session:**
+   ```powershell
+   # Host PC (PC4) - automatically configures guests and measures latency
+   .\scripts\Start-LiveShare-Host.ps1
+   ```
+
+2. **Guests join with LAN optimization:**
+   ```powershell
+   # Guest PCs (PC1-PC3) - automatically configured for direct LAN
+   C:\ops\LiveShare\Join-LiveShare-Guest.ps1 -AutoOpen -ForceLANMode
+   ```
+
+3. **Real-time network monitoring:**
+   - Host automatically pings all guests every 5 minutes
+   - Latency metrics logged and displayed in status
+   - Performance quality indicators (Excellent/Good/Fair/Poor)
+
+4. **Collaborative development:**
+   - Shared editing in VS Code (direct LAN connection)
+   - Shared terminal access (low latency)
+   - Shared debugging sessions (optimized)
+   - C++14 builds work across all PCs
+
+### Network Performance Monitoring
+
+```powershell
+# View real-time status with network metrics
+.\scripts\Show-LiveShareStatus.ps1 -Continuous -ShowLatency
+```
+
+Example output:
+```
+?? Live Share Fleet Status - 14:23:45
+================================================================================
+?? Session Status: Active
+???  Host: PC-4
+? Updated: 2025-01-09 14:23:45
+?? Connection Mode: direct
+??  C++ Standard: C++14
+?? Workspace: C:\Development\PrecisePointway
+
+?? Network Latencies:
+   PC-1: 3.2ms (Excellent)
+   PC-2: 4.7ms (Excellent)  
+   PC-3: 12.1ms (Good)
+
+?? Connected Guests:
+   PC-1 - Joined: 2025-01-09 14:15:32
+     ?? Latency: 3.2ms
+   PC-2 - Joined: 2025-01-09 14:16:45
+     ?? Latency: 4.7ms
+```
+
+## ?? Monitoring and Troubleshooting
+
+### Check Session Status with Network Metrics
+```powershell
+# From any PC - shows latency and connection quality
+.\scripts\Show-LiveShareStatus.ps1 -Continuous -ShowLatency
+```
+
+### View Detailed Logs
+```powershell
+# Host logs (includes network measurements)
+Get-Content "$env:USERPROFILE\LiveShareLogs\LiveShare_Host_*.log" -Tail 20
+
+# Guest logs (includes latency to host)
+Get-Content "$env:USERPROFILE\LiveShareLogs\LiveShare_Guest_*.log" -Tail 20
+```
+
+### Network Performance Indicators
+
+| Latency Range | Quality | Performance |
+|---------------|---------|-------------|
+| < 5ms | Excellent | Real-time collaboration |
+| 5-15ms | Good | Smooth collaboration |
+| 15-50ms | Fair | Noticeable delays |
+| > 50ms | Poor | Significant lag |
+
+### Common Issues and Solutions
+
+**Issue: "High latency detected"**
+- Solution: Check network switches and cables, ensure QoS is configured
+
+**Issue: "Connection using relay instead of direct"**
+- Solution: Check firewall rules, run deployment with `-OptimizeLAN` flag
+
+**Issue: "Cannot access NAS"**
+- Solution: Check network connectivity and permissions to `\\dxp4800plus-67ba\ops`
+
+**Issue: "Live Share extension not found"**
+- Solution: Run `.\scripts\Deploy-LiveShare-Fleet.ps1 -InstallLiveShare`
+
+**Issue: "C++ build fails"**
+- Solution: Verify C++ Build Tools are installed and C++14 standard is configured
+
+## ?? Advanced Features
+
+### Network Optimization
+- **Direct LAN connections**: Bypasses Microsoft relay servers
+- **Real-time latency monitoring**: Measures network performance every 5 minutes
+- **Firewall optimization**: Automated Windows Firewall rules for Live Share
+- **Connection quality indicators**: Visual feedback on network performance
+
+### Automated Notifications with Network Metrics
+Configure Slack/Teams webhooks in the host script:
+```powershell
+.\scripts\Start-LiveShare-Host.ps1 -AutoNotify -SlackWebhook "https://hooks.slack.com/..."
+```
+
+Notifications include:
+- Session link
+- Host information
+- Real-time latency measurements for all guests
+- Connection mode confirmation (direct LAN)
+
+### Fleet Management Integration
+Use existing fleet management for coordinated deployments:
+```powershell
+# Deploy with full LAN optimization
+.\scripts\Deploy-LiveShare-Fleet.ps1 -InstallLiveShare -SetupTasks -OptimizeLAN
+```
+
+### Custom Build Configurations
+The clean project files support:
+- C++14 standard compilation
+- Both Debug and Release configurations
+- x64 and Win32 platforms
+- Optimized for collaborative development
+
+## ?? Support
+
+- **Logs**: Check `%USERPROFILE%\LiveShareLogs\` for detailed session logs with network metrics
+- **Status**: Use "LiveShare: Check Session Status" VS Code task for real-time info
+- **Fleet Status**: Run `Show-LiveShareStatus.ps1 -ShowLatency` for network monitoring
+- **Network Issues**: Check latency indicators and firewall configuration
+
+## ?? Updates and Maintenance
+
+To update the Live Share configuration with LAN optimization across all PCs:
+```powershell
+# Redeploy with full optimization
+.\scripts\Deploy-LiveShare-Fleet.ps1 -InstallLiveShare -SetupTasks -OptimizeLAN
+```
+
+This will:
+- Update scripts and configurations on all fleet machines
+- Reconfigure VS Code settings for optimal LAN performance
+- Update firewall rules for direct connections
+- Refresh network optimization settings
+
+## ?? Performance Benefits
+
+With LAN optimization enabled, you can expect:
+
+- **Reduced Latency**: Direct connections eliminate relay server overhead
+- **Better Responsiveness**: Real-time code collaboration with minimal lag
+- **Network Monitoring**: Proactive identification of performance issues
+- **Optimized Firewall**: Proper port configuration for Live Share traffic
+- **Quality Indicators**: Visual feedback on connection performance
+- **C++14 Optimized**: Streamlined build process for collaborative development
+
+Your 4-PC development environment is now fully optimized for high-performance Live Share collaboration! ??

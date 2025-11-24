@@ -1,0 +1,6 @@
+C:/Users/andyj/source/repos/PrecisePointway/master/src/verifier/build/CMakeFiles/VerifyEvidenceLib.dir
+C:/Users/andyj/source/repos/PrecisePointway/master/src/verifier/build/CMakeFiles/Verify-Evidence.dir
+C:/Users/andyj/source/repos/PrecisePointway/master/src/verifier/build/CMakeFiles/verify_evidence_tests.dir
+C:/Users/andyj/source/repos/PrecisePointway/master/src/verifier/build/CMakeFiles/RUN_TESTS.dir
+C:/Users/andyj/source/repos/PrecisePointway/master/src/verifier/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/andyj/source/repos/PrecisePointway/master/src/verifier/build/CMakeFiles/ZERO_CHECK.dir

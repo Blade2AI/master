@@ -1,0 +1,16 @@
+compliance_dashboard:
+  EU_Machinery_2023_1230: pass
+  ISO_TS_15066: pass
+  IEC_62443: warn
+  ISO_12100: pass
+  IEC_61508: pass
+  GDPR: pass
+  NIS2: warn
+tamper_tests:
+  evidence2_hash_diff: pass
+  evidence3_modified: pass
+  merkle_root_changed: pass
+summary: "Standards: 5 pass, 2 warn, 0 fail | Tamper: 3/3 pass"
+timestamp: 2025-11-22T22:45:00Z
+build_id: build-4421
+signature_verified: true

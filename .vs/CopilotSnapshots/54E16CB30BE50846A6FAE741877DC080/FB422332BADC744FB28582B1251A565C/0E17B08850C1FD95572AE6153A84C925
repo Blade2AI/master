@@ -1,0 +1,22 @@
+﻿# Sovereign model stack (v0.1b baseline)
+# Define available models and routing rules by task type.
+models:
+  local_small:
+    id: "mistral:latest"
+    provider: "ollama"
+  local_large:
+    id: "llama2:latest"
+    provider: "ollama"
+  explanation_small:
+    id: "mistral:latest"
+    provider: "ollama"
+  discussion_small:
+    id: "mistral:latest"
+    provider: "ollama"
+
+routing_rules:
+  default: "local_small"
+  by_task_type:
+    governance: "local_small"
+    explanation: "explanation_small"
+    discussion: "discussion_small"

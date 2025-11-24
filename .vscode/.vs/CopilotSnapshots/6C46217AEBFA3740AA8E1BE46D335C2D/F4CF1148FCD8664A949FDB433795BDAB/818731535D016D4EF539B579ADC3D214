@@ -1,0 +1,231 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode/master/extensions/tasks/schemas/v3.0.0/tasks.schema.json",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Collab: Start (Pull + Open + Live Share)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-Collab.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoLiveShare"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Collab: End (Commit + Push)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/End-Collab.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-Message",
+        "${input:commitMessage}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Start Host Session",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-LiveShare-Host.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoNotify",
+        "-SolutionFile",
+        "${workspaceFolder}/PrecisePointway.sln"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "LiveShare: Join Session",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Join-LiveShare-Guest.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoOpen"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Quick Join (Read from NAS)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$nasRoot = '\\\\dxp4800plus-67ba\\ops'; $linkFile = Join-Path $nasRoot 'LiveShareLink.txt'; if (Test-Path $linkFile) { $link = Get-Content $linkFile; Write-Output \"Joining: $link\"; Start-Process code -ArgumentList \"--command\", \"liveshare.join\", \"$link\" } else { Write-Output \"No session link found at $linkFile\" }"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Check Session Status",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$nasRoot = '\\\\dxp4800plus-67ba\\ops'; $statusFile = Join-Path $nasRoot 'LiveShareStatus.json'; if (Test-Path $statusFile) { $status = Get-Content $statusFile | ConvertFrom-Json; Write-Output \"Status: $($status.Status)\"; Write-Output \"Host: $($status.Host)\"; Write-Output \"Time: $($status.Timestamp)\"; if ($status.Link) { Write-Output \"Link: $($status.Link)\" } } else { Write-Output \"No status file found\" }"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Fleet: Bootstrap All PCs",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/FleetBootstrap.ps1",
+        "-RunNow"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Fleet: Deploy LiveShare Setup",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Deploy-LiveShare-Fleet.ps1",
+        "-InstallLiveShare",
+        "-SetupTasks"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Git: Pull",
+      "type": "shell",
+      "command": "git",
+      "args": ["pull"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Git: Push",
+      "type": "shell",
+      "command": "git",
+      "args": ["push"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build: C++ Debug",
+      "type": "shell",
+      "command": "msbuild",
+      "args": [
+        "${workspaceFolder}/PrecisePointway.sln",
+        "/p:Configuration=Debug",
+        "/p:Platform=x64"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Build: C++ Release",
+      "type": "shell",
+      "command": "msbuild",
+      "args": [
+        "${workspaceFolder}/PrecisePointway.sln",
+        "/p:Configuration=Release",
+        "/p:Platform=x64"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "commitMessage",
+      "type": "promptString",
+      "description": "Commit message",
+      "default": "collab: update"
+    }
+  ]
+}

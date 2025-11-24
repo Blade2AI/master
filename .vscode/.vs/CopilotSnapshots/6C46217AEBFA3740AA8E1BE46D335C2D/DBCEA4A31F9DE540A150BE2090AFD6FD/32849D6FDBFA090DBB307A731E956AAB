@@ -1,0 +1,730 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vscode/master/extensions/tasks/schemas/v3.0.0/tasks.schema.json",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Collab: Start (Pull + Open + Live Share)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-Collab.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoLiveShare"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Collab: End (Commit + Push)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/End-Collab.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-Message",
+        "${input:commitMessage}"
+      ]
+    },
+    {
+      "label": "LiveShare: Start Host Session (Enhanced with Kindness)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-LiveShare-Host.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoNotify",
+        "-SolutionFile",
+        "${workspaceFolder}/PrecisePointway.sln",
+        "-AutoDiscover",
+        "-DetailedMetrics"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "LiveShare: Start Host Session (Basic)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-LiveShare-Host.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-SolutionFile",
+        "${workspaceFolder}/PrecisePointway.sln"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "LiveShare: Join Session (with Kindness)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Join-LiveShare-Guest.ps1",
+        "-WorkspacePath",
+        "${workspaceFolder}",
+        "-AutoOpen"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Quick Join (Read from NAS)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$nasRoot = '\\\\dxp4800plus-67ba\\ops'; $linkFile = Join-Path $nasRoot 'LiveShareLink.txt'; if (Test-Path $linkFile) { $link = Get-Content $linkFile; Write-Output \"Joining with kindness: $link\"; Start-Process code -ArgumentList \"--command\", \"liveshare.join\", \"$link\" } else { Write-Output \"No session link found at $linkFile - patience brings opportunities\" }"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Check Session Status",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$nasRoot = '\\\\dxp4800plus-67ba\\ops'; $statusFile = Join-Path $nasRoot 'LiveShareStatus.json'; if (Test-Path $statusFile) { $status = Get-Content $statusFile | ConvertFrom-Json; Write-Output \"=== Live Share Status with Kindness ===\"; Write-Output \"Status: $($status.Status)\"; Write-Output \"Host: $($status.Host)\"; Write-Output \"Time: $($status.Timestamp)\"; Write-Output \"Connection Mode: $($status.ConnectionMode)\"; if ($status.GuestCount) { Write-Output \"Guests: $($status.GuestCount)\" }; if ($status.Motto) { Write-Output \"Motto: $($status.Motto)\" }; if ($status.Link) { Write-Output \"Link: $($status.Link)\" }; if ($status.GuestLatencies) { Write-Output \"Network Performance:\"; foreach ($guest in $status.GuestLatencies.PSObject.Properties) { $metrics = $guest.Value; if ($metrics.Average) { Write-Output \"  $($guest.Name): $($metrics.Average)ms ($($metrics.Quality))\" } else { Write-Output \"  $($guest.Name): Unreachable\" } } } } else { Write-Output \"No status file found - opportunities await\" }"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Test Network Optimization",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Test-LiveShare-Optimization.ps1",
+        "-AutoDiscover",
+        "-ShowDetailedMetrics",
+        "-PingCount",
+        "8"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "LiveShare: Test Specific PCs",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Test-LiveShare-Optimization.ps1",
+        "-TargetPCs",
+        "${input:targetPCs}",
+        "-ShowDetailedMetrics"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Fleet: Bootstrap All PCs",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/FleetBootstrap.ps1",
+        "-RunNow"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Fleet: Deploy LiveShare Setup (Full Optimization with Kindness)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Deploy-LiveShare-Fleet.ps1",
+        "-InstallLiveShare",
+        "-SetupTasks",
+        "-OptimizeLAN"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Fleet: Deploy to Specific PCs",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Deploy-LiveShare-Fleet.ps1",
+        "-Targets",
+        "${input:targetPCs}",
+        "-InstallLiveShare",
+        "-SetupTasks",
+        "-OptimizeLAN"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Git: Pull",
+      "type": "shell",
+      "command": "git",
+      "args": ["pull"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Git: Push",
+      "type": "shell",
+      "command": "git",
+      "args": ["push"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build: C++14 Debug (with Care)",
+      "type": "shell",
+      "command": "msbuild",
+      "args": [
+        "${workspaceFolder}/PrecisePointway.sln",
+        "/p:Configuration=Debug",
+        "/p:Platform=x64"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Build: C++14 Release (with Excellence)",
+      "type": "shell",
+      "command": "msbuild",
+      "args": [
+        "${workspaceFolder}/PrecisePointway.sln",
+        "/p:Configuration=Release",
+        "/p:Platform=x64"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "LiveShare: Start Behavioral OS Host",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Start-BehavioralOS-Host.ps1",
+        "-EnableBehavioralOS",
+        "-EnableCAI",
+        "-AutoDiscover"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "LiveShare: Test Behavioral OS Network",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Test-BehavioralOS-Network.ps1",
+        "-AutoDiscover",
+        "-ShowDetailedMetrics"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "BigCodex: Generate Fact Card",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/BigCodex-FactCard.ps1",
+        "-FleetShare",
+        "-ValidateEvidence"
+      ],
+      "group": "codex",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "BigCodex: Generate Timeline",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/BigCodex-Timeline.ps1",
+        "-FleetShare"
+      ],
+      "group": "codex"
+    },
+    {
+      "label": "BigCodex: Evidence Validation",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/BigCodex-Validate.ps1",
+        "-ComprehensiveCheck"
+      ],
+      "group": "codex"
+    },
+    {
+      "label": "Fleet: Deploy BigCodex to All PCs",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Deploy-BigCodex-Fleet.ps1",
+        "-InstallCodex",
+        "-SyncEvidence"
+      ],
+      "group": "deployment"
+    },
+    {
+      "label": "Fleet: Deploy LiveShare Setup (Full Optimization with Kindness)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Deploy-LiveShare-Fleet.ps1",
+        "-InstallLiveShare",
+        "-SetupTasks",
+        "-OptimizeLAN"
+      ],
+      "group": "deployment"
+    },
+    {
+      "label": "Fleet: Optimize with Mistral AI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Optimize-Fleet-Mistral.ps1",
+        "-AnalyzeNetwork",
+        "-OptimizeConfiguration",
+        "-GenerateRecommendations"
+      ],
+      "group": "optimization"
+    },
+    {
+      "label": "Elite Search: Comprehensive Analysis",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Elite-Search.ps1",
+        "-Scope",
+        "Comprehensive",
+        "-FleetShare",
+        "-GenerateFactCard",
+        "-ApplyTruthFilter"
+      ],
+      "group": "search",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Elite Search: Local Workspace",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Elite-Search.ps1",
+        "-Scope",
+        "Local",
+        "-SearchQuery",
+        "${input:searchQuery}"
+      ],
+      "group": "search",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Elite Search: Fleet Analysis",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Elite-Search.ps1",
+        "-Scope",
+        "Fleet",
+        "-FleetShare",
+        "-SearchQuery",
+        "${input:searchQuery}"
+      ],
+      "group": "search",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Elite Search: Spiritual Wisdom",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Elite-Search.ps1",
+        "-Scope",
+        "Spiritual",
+        "-SearchQuery",
+        "${input:searchQuery}"
+      ],
+      "group": "search",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Precise Pointway: Obama-Robinson Investigation",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Execute-PrecisePointway-Search.ps1",
+        "-FullInvestigation",
+        "-GenerateFactCard",
+        "-FleetShare"
+      ],
+      "group": "investigation",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Precise Pointway: Focused Analysis",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Execute-PrecisePointway-Search.ps1",
+        "-FleetShare"
+      ],
+      "group": "investigation",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Analytics: Fleet Dashboard (Real-Time Intelligence)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Advanced-Fleet-Analytics-Dashboard.ps1",
+        "-GenerateReport",
+        "-PredictiveMode"
+      ],
+      "group": "analytics",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Analytics: Live Monitoring",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Advanced-Fleet-Analytics-Dashboard.ps1",
+        "-StartDashboard",
+        "-RefreshInterval",
+        "15"
+      ],
+      "group": "analytics",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🔒 Protocol 5.3: Emergency Security Lock",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Protocol-5-3-SecurityLock.ps1",
+        "-EmergencyLock",
+        "-ScanAndSecure",
+        "-ImplementBoardwalkProtocol"
+      ],
+      "group": "security",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔍 Protocol 5.3: Security Scan Only",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Protocol-5-3-SecurityLock.ps1",
+        "-ScanAndSecure"
+      ],
+      "group": "security",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🎭 Protocol 5.3: Boardwalk Mapping",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/Protocol-5-3-SecurityLock.ps1",
+        "-ImplementBoardwalkProtocol"
+      ],
+      "group": "security",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "commitMessage",
+      "type": "promptString",
+      "description": "Commit message (with kindness)",
+      "default": "collab: update with collaborative kindness"
+    },
+    {
+      "id": "targetPCs",
+      "type": "promptString",
+      "description": "Target PC names (comma-separated, e.g., pc-1,pc-2,pc-3)",
+      "default": "pc-1,pc-2,pc-3"
+    },
+    {
+      "id": "searchQuery",
+      "type": "promptString",
+      "description": "Enter search query for elite analysis",
+      "default": ""
+    }
+  ]
+}

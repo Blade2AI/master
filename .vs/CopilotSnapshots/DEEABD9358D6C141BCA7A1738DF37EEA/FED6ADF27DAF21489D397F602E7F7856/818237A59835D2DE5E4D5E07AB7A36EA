@@ -1,0 +1,42 @@
+﻿cmake_minimum_required(VERSION 3.5)
+project(verify_evidence CXX)
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Library
+add_library(VerifyEvidenceLib STATIC VerifyEvidenceLib.cpp VerifyEvidenceLib.h)
+
+# Option to link libsodium if available on the system
+find_package(PkgConfig QUIET)
+if (PKG_CONFIG_FOUND)
+    pkg_check_modules(SODIUM libsodium)
+    if (SODIUM_FOUND)
+        target_include_directories(VerifyEvidenceLib PRIVATE ${SODIUM_INCLUDE_DIRS})
+        target_link_directories(VerifyEvidenceLib PRIVATE ${SODIUM_LIBRARY_DIRS})
+        target_link_libraries(VerifyEvidenceLib ${SODIUM_LIBRARIES})
+        target_compile_definitions(VerifyEvidenceLib PRIVATE SODIUM_AVAILABLE)
+    endif()
+endif()
+
+# If user set an env var LIBSODIUM_ROOT, try to use it (for Windows static builds)
+if (DEFINED ENV{LIBSODIUM_ROOT})
+    set(LIBSODIUM_ROOT $ENV{LIBSODIUM_ROOT})
+    find_library(SODIUM_LIB NAMES sodium PATHS ${LIBSODIUM_ROOT}/lib)
+    find_path(SODIUM_INC sodium.h PATHS ${LIBSODIUM_ROOT}/include)
+    if (SODIUM_LIB AND SODIUM_INC)
+        target_include_directories(VerifyEvidenceLib PRIVATE ${SODIUM_INC})
+        target_link_libraries(VerifyEvidenceLib ${SODIUM_LIB})
+        target_compile_definitions(VerifyEvidenceLib PRIVATE SODIUM_AVAILABLE)
+    endif()
+endif()
+
+# Executable
+add_executable(Verify-Evidence Verify-Evidence.cpp)
+target_link_libraries(Verify-Evidence PRIVATE VerifyEvidenceLib)
+
+# Tests
+enable_testing()
+add_executable(verify_evidence_tests tests/verify_evidence_tests.cpp)
+target_link_libraries(verify_evidence_tests PRIVATE VerifyEvidenceLib)
+add_test(NAME verify_evidence_tests COMMAND verify_evidence_tests)

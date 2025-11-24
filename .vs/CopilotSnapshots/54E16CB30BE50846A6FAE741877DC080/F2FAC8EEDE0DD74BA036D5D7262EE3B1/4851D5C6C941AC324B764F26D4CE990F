@@ -1,0 +1,76 @@
+﻿<#!
+.SYNOPSIS
+  Wrapper to apply network anchoring (IPFS + Arweave) to an existing anchor JSON.
+.DESCRIPTION
+  Attempts python-based implementation (apply_network_anchors.py). Falls back to Perform-NetworkAnchoring.ps1.
+  If AnchorJsonPath not supplied, auto-select latest event_anchor_*.json under out\anchors.
+.PARAMETER AnchorJsonPath
+  Path to anchor JSON produced by Seal-And-Anchor-Dual.ps1.
+.PARAMETER DryRun
+  Skip real network calls (only report intended actions).
+.EXAMPLES
+  pwsh -File scripts\Apply-NetworkAnchors.ps1 -DryRun
+  pwsh -File scripts\Apply-NetworkAnchors.ps1 -AnchorJsonPath out\anchors\event_anchor_123.json
+#>
+[CmdletBinding()]
+param(
+  [string]$AnchorJsonPath,
+  [switch]$DryRun,
+  [string]$AnchorsDir = 'out/anchors'
+)
+$ErrorActionPreference='Stop'
+Write-Host '== Apply-NetworkAnchors Wrapper ==' -ForegroundColor Cyan
+
+# Resolve anchor JSON if not provided
+if(-not $AnchorJsonPath){
+  if(-not (Test-Path $AnchorsDir)){ throw "Anchors directory not found: $AnchorsDir" }
+  $latest = Get-ChildItem -Path $AnchorsDir -Filter 'event_anchor_*.json' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if(-not $latest){ throw "No anchor JSON files found under $AnchorsDir" }
+  $AnchorJsonPath = $latest.FullName
+  Write-Host "Auto-selected latest anchor: $AnchorJsonPath" -ForegroundColor DarkGray
+}
+if(-not (Test-Path $AnchorJsonPath)){ throw "Anchor JSON not found: $AnchorJsonPath" }
+
+# Dry-run note
+if($DryRun){ Write-Host '[MODE] DryRun active – no network uploads will be performed.' -ForegroundColor Yellow }
+
+# Attempt python implementation first
+$python = Get-Command python -ErrorAction SilentlyContinue
+$pyScript = Join-Path $PSScriptRoot 'apply_network_anchors.py'
+if($python -and (Test-Path $pyScript) -and -not $DryRun){
+  Write-Host '[NET] Using python apply_network_anchors.py' -ForegroundColor Cyan
+  try {
+    & $python.Path $pyScript --anchor $AnchorJsonPath
+    Write-Host '[NET] Python anchoring completed.' -ForegroundColor Green
+    exit 0
+  } catch {
+    Write-Host "[WARN] Python anchoring failed: $_" -ForegroundColor Yellow
+  }
+} elseif($DryRun){
+  Write-Host '[NET] Skipping python call due to DryRun.' -ForegroundColor Yellow
+} else {
+  Write-Host '[NET] Python apply_network_anchors.py not available; falling back.' -ForegroundColor Yellow
+}
+
+# Fallback to PowerShell Perform-NetworkAnchoring.ps1
+$psNet = Join-Path $PSScriptRoot 'Perform-NetworkAnchoring.ps1'
+$anchorTxt = $AnchorJsonPath -replace 'event_anchor_','' -replace '\.json$','.anchor.txt'
+if(-not (Test-Path $anchorTxt)){
+  # Attempt to locate matching .anchor.txt in same dir
+  $anchorTxt = Get-ChildItem -Path (Split-Path $AnchorJsonPath) -Filter '*.anchor.txt' | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object FullName
+}
+if(-not $anchorTxt){ Write-Host '[WARN] Matching .anchor.txt not found; network script may need raw JSON only.' -ForegroundColor Yellow }
+
+if(Test-Path $psNet){
+  Write-Host '[NET] Falling back to Perform-NetworkAnchoring.ps1' -ForegroundColor Cyan
+  try {
+    & $psNet -AnchorJsonPath $AnchorJsonPath -AnchorTxtPath $anchorTxt -DryRun:$DryRun
+    Write-Host '[NET] Fallback anchoring script completed.' -ForegroundColor Green
+  } catch {
+    Write-Host "[ERROR] Fallback anchoring failed: $_" -ForegroundColor Red
+    exit 1
+  }
+} else {
+  Write-Host '[ERROR] Perform-NetworkAnchoring.ps1 not found; cannot complete anchoring.' -ForegroundColor Red
+  exit 1
+}

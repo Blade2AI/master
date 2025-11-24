@@ -1,0 +1,48 @@
+﻿// Catch2 single-header placeholder for tests
+// Extended stub to include additional test cases and REQUIRE_FALSE macro.
+#pragma once
+#include <iostream>
+#include <stdexcept>
+#include <string>
+
+#define TEST_CASE(name) void test_##name()
+#define REQUIRE(x) do { if (!(x)) { std::cerr << "Test failed: " #x << std::endl; throw std::runtime_error("Test failure"); } } while(0)
+#ifndef REQUIRE_FALSE
+#define REQUIRE_FALSE(x) REQUIRE(!(x))
+#endif
+
+// Declarations for all tests (must match TEST_CASE names in sources)
+extern void test_Merkle_RightOrder_ComputesExpectedRoot();
+extern void test_Merkle_TamperedFile_FailsMatch();
+extern void test_BatchMerkleProof_Verify_Succeeds();
+extern void test_BatchMerkleProof_Tamper_Fails();
+#ifdef SODIUM_AVAILABLE
+extern void test_Signature_Verify_Success();
+extern void test_Signature_Verify_InvalidSignature_Fails();
+extern void test_Signature_Verify_WrongPubkey_Fails();
+#endif
+extern void test_Extra_Test1();
+extern void test_Extra_Test2();
+
+static int run_all_tests() {
+    int passed = 0, total = 0;
+    auto run = [&](const char* name, void(*fn)()){
+        ++total;
+        try { fn(); ++passed; std::cout << "[TEST PASS] " << name << "\n"; }
+        catch(const std::exception& e){ std::cout << "[TEST FAIL] " << name << " - " << e.what() << "\n"; }
+        catch(...){ std::cout << "[TEST FAIL] " << name << " - unknown error\n"; }
+    };
+    run("Merkle_RightOrder_ComputesExpectedRoot", test_Merkle_RightOrder_ComputesExpectedRoot);
+    run("Merkle_TamperedFile_FailsMatch", test_Merkle_TamperedFile_FailsMatch);
+    run("BatchMerkleProof_Verify_Succeeds", test_BatchMerkleProof_Verify_Succeeds);
+    run("BatchMerkleProof_Tamper_Fails", test_BatchMerkleProof_Tamper_Fails);
+#ifdef SODIUM_AVAILABLE
+    run("Signature_Verify_Success", test_Signature_Verify_Success);
+    run("Signature_Verify_InvalidSignature_Fails", test_Signature_Verify_InvalidSignature_Fails);
+    run("Signature_Verify_WrongPubkey_Fails", test_Signature_Verify_WrongPubkey_Fails);
+#endif
+    run("Extra_Test1", test_Extra_Test1);
+    run("Extra_Test2", test_Extra_Test2);
+    std::cout << passed << "/" << total << " tests passed\n";
+    return (passed == total) ? 0 : 1;
+}

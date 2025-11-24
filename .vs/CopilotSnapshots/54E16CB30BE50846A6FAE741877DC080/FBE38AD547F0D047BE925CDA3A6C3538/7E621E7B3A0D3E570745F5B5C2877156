@@ -1,0 +1,27 @@
+﻿import sys, os, uuid
+sys.path.append(os.getcwd())
+from src.core.router import SovereignRouter
+
+def run_analyst():
+    try:
+        router = SovereignRouter("property")
+    except Exception as e:
+        print(f"❌ FATAL: Router Init Failed: {e}")
+        return
+    print(f"🏘️  Property Analyst Online | Mode: {router.track.upper()}")
+    mock_data = {
+        "address": "123 Test Lane",
+        "asking_price": 350000,
+        "condition_score": 4,
+        "risk_flags": ["STRUCTURAL_RISK"],
+        "confidence": 0.8
+    }
+    filename = f"prop_{uuid.uuid4().hex[:8]}.json"
+    try:
+        path = router.save_result(filename, mock_data)
+        print(f"✅ Success: {path}")
+    except Exception as e:
+        print(f"❌ Failed: {e}")
+
+if __name__ == "__main__":
+    run_analyst()

@@ -1,0 +1,145 @@
+<#
+.SYNOPSIS
+  Dual-anchor a ledger snapshot: compute root hash, emit GDPR-safe anchor JSON,
+  and prepare for Arweave (Bundlr) + IPFS (nft.storage) upload.
+
+.DESIGN CONSTRAINTS (GDPR):
+  - No personal data ever leaves the controlled ledger store.
+  - Anchor JSON contains ONLY:
+      - root_hash, hash_algorithm
+      - pseudonymous node_id
+      - timestamp_utc
+      - backend receipts (tx_id, cid)
+      - signature over the anchor record
+  - Event content stays in mutable storage with retention controls.
+
+DEPENDENCIES (expected by future expansion):
+  - JSON schema validator for schemas/event_anchor.json
+  - Bundlr client for Arweave
+  - nft.storage client for IPFS
+
+SECRETS:
+  - BUNDLR_KEY (env var)
+  - NFT_STORAGE_API_KEY (env var)
+#>
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory=$false)][string]$LedgerPath,
+  [string]$OutputDir = 'out/anchors',
+  [string]$SchemaPath = 'schemas/event_anchor.json',
+  [string]$Environment = 'proof',
+  [string]$StateDir = 'state',
+  [string]$RecorderScript = 'scripts/Write-Event.ps1',
+  [string]$BundlrNode = $env:BUNDLR_NODE,
+  [string]$Payload6Lines,  # If provided, bypass ledger hash and use these six lines directly
+  [switch]$Live,           # NEW: request live anchoring (guarded)
+  [switch]$DryRun          # NEW: force dry-run (overrides -Live)
+)
+$ErrorActionPreference='Stop'
+Write-Host '== Seal-And-Anchor-Dual ==' -ForegroundColor Cyan
+Write-Host "LedgerPath : $LedgerPath"
+Write-Host ("Live       : {0}" -f $Live.IsPresent)
+Write-Host ("DryRun     : {0}" -f $DryRun.IsPresent)
+Write-Host "Environment : $Environment"
+
+if(-not (Test-Path $OutputDir)){ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null }
+if(-not (Test-Path $StateDir)){ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null }
+
+$timestampUtc = (Get-Date).ToUniversalTime().ToString('o')
+$nodeId = $env:SOVEREIGN_NODE_ID; if(-not $nodeId){ $nodeId='node-unknown' }
+
+$usingDirectPayload = $false
+$anchorTextLines = @()
+
+if($Payload6Lines){
+  $anchorTextLines = $Payload6Lines -split "`n" | ForEach-Object { $_.Trim() }
+  if($anchorTextLines.Count -ne 6){ throw "Payload6Lines must contain exactly 6 lines (got $($anchorTextLines.Count))" }
+  $usingDirectPayload = $true
+  Write-Host '[MODE] Direct 6-line payload anchoring (erasure or external build)' -ForegroundColor Yellow
+} else {
+  if(-not $LedgerPath){ throw 'LedgerPath required when not supplying Payload6Lines.' }
+  if(-not (Test-Path $LedgerPath)){ throw "LedgerPath not found: $LedgerPath" }
+  $ledgerHash = Get-FileHash -LiteralPath $LedgerPath -Algorithm SHA256
+  $rootHash = $ledgerHash.Hash.ToLower()
+  # Build synthetic 6-line text payload (normal anchor)
+  $prevStateFile = Join-Path $StateDir 'permanent_anchor.json'
+  $prevAr = '0' * 64
+  $prevIp = '0' * 64
+  if(Test-Path $prevStateFile){
+    try { $prev = Get-Content $prevStateFile -Raw | ConvertFrom-Json; if($prev.arweave){ $prevAr = $prev.arweave }; if($prev.ipfs){ $prevIp = $prev.ipfs } } catch { }
+  }
+  $anchorTextLines = @(
+    $rootHash.PadRight(128,'0').Substring(0,128), # expand to 128 if single hash
+    $timestampUtc,
+    $nodeId,
+    'sovereign-fr-v1.0',
+    $prevAr,
+    $prevIp
+  )
+}
+
+# Write .anchor.txt (immutable chain element for verifier)
+$anchorId = [guid]::NewGuid().ToString()
+$anchorTxtPath = Join-Path $OutputDir ("$anchorId.anchor.txt")
+$anchorTextLines -join "`n" | Set-Content -LiteralPath $anchorTxtPath -Encoding UTF8
+Write-Host "Anchor text written: $anchorTxtPath" -ForegroundColor Green
+
+# Build JSON anchor object (GDPR-safe)
+$rootLine = $anchorTextLines[0]
+$prevArweave = $anchorTextLines[4]
+$prevIpfs    = $anchorTextLines[5]
+$anchorJson = [ordered]@{
+  schema_version = '1.0.0'
+  anchor_id      = $anchorId
+  node_id        = $nodeId
+  root_hash      = $rootLine.Substring(0,64)  # canonical primary hash
+  hash_algorithm = 'sha256'
+  timestamp_utc  = $timestampUtc
+  backends       = [ordered]@{
+    arweave = [ordered]@{ enabled=$true; tx_id=$null; bundlr_node=$BundlrNode }
+    ipfs    = [ordered]@{ enabled=$true; cid=$null; provider=$null }
+  }
+  signature      = [ordered]@{ alg='ed25519'; key_id=$env:SOVEREIGN_SIGNING_KEY_ID; value=$null }
+  meta           = [ordered]@{ backend_version='flight-recorder-1.0.0'; environment=$Environment; direct_payload=$usingDirectPayload }
+  previous       = [ordered]@{ arweave_tx_id=$prevArweave; ipfs_cid=$prevIpfs }
+}
+
+$anchorJsonPath = Join-Path $OutputDir ("event_anchor_$anchorId.json")
+$anchorJson | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $anchorJsonPath -Encoding UTF8
+Write-Host "Anchor JSON written: $anchorJsonPath" -ForegroundColor Green
+
+# TODO: Schema validation hook (placeholder)
+if(Test-Path $SchemaPath){ Write-Host "(TODO) Validate $anchorJsonPath against $SchemaPath" -ForegroundColor Yellow }
+
+# TODO: Network anchoring (Bundlr/IPFS) – populate tx_id & cid then rewrite JSON file
+Write-Host '[STUB] Network anchoring not implemented – tx_id/cid remain null.' -ForegroundColor Yellow
+
+# Update state permanent_anchor.json
+$stateOut = [ordered]@{
+  arweave_txid = $anchorId.Substring(0,64).PadRight(64,'0')  # placeholder deterministic
+  ipfs_cid     = $anchorId.Substring(0,64).PadRight(64,'0')
+  timestamp_utc= $timestampUtc
+  node_id      = $nodeId
+  root_hash    = $anchorJson.root_hash
+}
+$stateFile = Join-Path $StateDir 'permanent_anchor.json'
+$stateOut | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $stateFile -Encoding UTF8
+Write-Host "State updated: $stateFile" -ForegroundColor Cyan
+
+# Emit recorder event (anchor) – reduced payload (no personal data)
+if(Test-Path $RecorderScript){
+  try { & $RecorderScript -EventType 'anchor' -Payload @{ anchor_id=$anchorJson.anchor_id; node_id=$nodeId; root_hash=$anchorJson.root_hash; timestamp_utc=$timestampUtc; prev_arweave=$prevArweave; prev_ipfs=$prevIpfs } } catch { Write-Host "Recorder emission failed: $_" -ForegroundColor Yellow }
+} else { Write-Host "Recorder script not found: $RecorderScript" -ForegroundColor Yellow }
+
+# After recorder emission, perform network anchoring (if available)
+$netScript = 'scripts/Perform-NetworkAnchoring.ps1'
+if(Test-Path $netScript){
+  try {
+    Write-Host '[NET] Initiating network anchoring sequence...' -ForegroundColor Cyan
+    & $netScript -ManifestPath $anchorJsonPath -Live:$Live -DryRun:$DryRun
+  } catch { Write-Host "[WARN] Network anchoring failed: $_" -ForegroundColor Yellow }
+} else {
+  Write-Host '[NET] Network anchoring script missing; skipped.' -ForegroundColor Yellow
+}
+
+Write-Host '[DONE] Anchor operation complete.' -ForegroundColor Green

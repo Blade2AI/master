@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <style>
+    .bg { fill: #0b2240; }
+    .card { fill: #07263a; stroke: #1f7aaa; stroke-width: 2; rx: 12; }
+    .header { fill: #ffffff; font-family: Arial, Helvetica, sans-serif; font-weight:700; font-size:28px; }
+    .sub { fill: #bfe9ff; font-family: Arial, Helvetica, sans-serif; font-size:16px; }
+    .title { fill: #ffffff; font-family: Arial, Helvetica, sans-serif; font-weight:700; font-size:36px; }
+    .box-title { fill: #1f7aaa; font-weight:700; font-size:18px; }
+    .muted { fill: #9fbfd6; font-size:14px; }
+    .cta { fill: #ffffff; font-weight:700; font-size:16px; }
+    .small { fill: #d7eefc; font-size:12px; }
+    .line { stroke: #1f7aaa; stroke-width: 3; stroke-linecap: round; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1200" height="675" />
+
+  <!-- Header -->
+  <text x="36" y="56" class="title">Verifiable AI Governance for Critical Infrastructure</text>
+  <text x="36" y="86" class="sub">Sovereign Systems — immutable decision trails, air-gap hardened, policy-enforced automation</text>
+
+  <!-- Problem box -->
+  <g transform="translate(36,120)">
+    <rect class="card" width="350" height="185" />
+    <text x="20" y="36" class="box-title">The Trust Gap</text>
+    <text x="20" y="66" class="muted">Automation vs Regulation</text>
+    <text x="20" y="96" class="small">• Opaque model decisions</text>
+    <text x="20" y="118" class="small">• Weak, unverifiable logs</text>
+    <text x="20" y="140" class="small">• Air-gap & OT constraints</text>
+  </g>
+
+  <!-- Solution (chain) -->
+  <g transform="translate(420,120)">
+    <rect class="card" width="730" height="380" />
+    <text x="24" y="36" class="box-title">Sovereign — The Verifiable Chain</text>
+
+    <!-- Chain icons -->
+    <!-- Policy -->
+    <g transform="translate(40,80)">
+      <rect x="0" y="0" width="140" height="90" rx="8" fill="#083a56" stroke="#2bb0ff" stroke-width="2" />
+      <text x="12" y="28" class="small">Signed Policy Manifest</text>
+      <text x="12" y="52" class="muted">Crypto-signed, enforceable</text>
+    </g>
+
+    <!-- Arrow -->
+    <line x1="200" y1="120" x2="260" y2="120" class="line" />
+
+    <!-- Multi-agent -->
+    <g transform="translate(280,80)">
+      <rect x="0" y="0" width="160" height="90" rx="8" fill="#083a56" stroke="#2bb0ff" stroke-width="2" />
+      <text x="14" y="28" class="small">Multi-Agent Enforcement</text>
+      <text x="14" y="52" class="muted">Arbiter / Validator / Specialist</text>
+    </g>
+
+    <!-- Arrow -->
+    <line x1="460" y1="120" x2="520" y2="120" class="line" />
+
+    <!-- Flight recorder -->
+    <g transform="translate(540,80)">
+      <rect x="0" y="0" width="160" height="90" rx="8" fill="#083a56" stroke="#2bb0ff" stroke-width="2" />
+      <text x="14" y="28" class="small">Evidence Flight Recorder</text>
+      <text x="14" y="52" class="muted">Merkle roots · Anchoring</text>
+    </g>
+
+    <!-- Arrow down to Air-gap -->
+    <line x1="620" y1="170" x2="620" y2="236" class="line" />
+
+    <!-- Air-gap box -->
+    <g transform="translate(280,200)">
+      <rect x="0" y="0" width="320" height="120" rx="8" fill="#052934" stroke="#2bb0ff" stroke-width="2" />
+      <text x="12" y="28" class="box-title" fill="#9fe2ff">Air?Gap & Operational SOPs</text>
+      <text x="12" y="56" class="muted">NAS / transport · Fleet audits · HSM-ready key handling</text>
+    </g>
+
+  </g>
+
+  <!-- Moat & CTA -->
+  <g transform="translate(36,320)">
+    <rect x="0" y="0" width="350" height="180" rx="12" fill="#07263a" stroke="#1f7aaa" stroke-width="2" />
+    <text x="16" y="36" class="box-title">Defensible Moat</text>
+    <text x="16" y="64" class="small">• End?to?end sealed workflow</text>
+    <text x="16" y="86" class="small">• Procedural IP: air?gap SOPs & operator scripts</text>
+    <text x="16" y="108" class="small">• Domain manifests (trauma?informed alignment)</text>
+
+    <rect x="16" y="130" width="150" height="34" rx="6" fill="#1f7aaa" />
+    <text x="28" y="152" class="cta">Pilot: 8–12 weeks</text>
+  </g>
+
+  <!-- Right CTA -->
+  <g transform="translate(820,420)">
+    <rect x="0" y="0" width="330" height="150" rx="12" fill="#07263a" stroke="#1f7aaa" stroke-width="2" />
+    <text x="16" y="36" class="box-title">Pilot Ask</text>
+    <text x="16" y="64" class="small">$150k–$350k · 8–12 weeks</text>
+    <text x="16" y="88" class="muted">Deliverables: deployed pipeline, Verify?Evidence tool, pilot report</text>
+    <text x="16" y="112" class="muted">Success: 100% cryptographic integrity · SOP validated</text>
+
+    <rect x="16" y="118" width="120" height="28" rx="6" fill="#2bb0ff" />
+    <text x="28" y="138" class="cta">Approve Pilot</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="36" y="640" class="small">Sovereign Systems Corp. — Placeholder contact: [name] • [email@example.com]</text>
+
+</svg>

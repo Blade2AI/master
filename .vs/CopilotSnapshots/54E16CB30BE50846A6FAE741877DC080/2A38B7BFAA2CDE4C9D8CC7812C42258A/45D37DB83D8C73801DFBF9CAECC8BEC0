@@ -1,0 +1,35 @@
+﻿# modules/Meeting-Engine.psm1
+# Minimal Meeting Engine: builds meeting records from spec and writes to disk
+
+function Invoke-SovMeeting {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Type,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    $dir = "C:\BladeOps\Meetings"
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
+    $meetingId = "MEET-{0}-{1:0000}" -f (Get-Date -Format "yyyyMMddHHmmss"), (Get-Random -Minimum 1 -Maximum 9999)
+    $meeting = [pscustomobject]@{
+        meeting_id = $meetingId
+        type = $Type
+        context = $Context
+        participants = @()
+        decisions = @()
+        actions = @()
+        created_at = (Get-Date).ToString('o')
+    }
+
+    $outPath = Join-Path $dir ("$meetingId.json")
+    $meeting | ConvertTo-Json -Depth 10 | Out-File $outPath -Encoding UTF8
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        Log-GovernanceEvent @{ type = 'MEETING_HELD'; message = "Meeting $meetingId of type $Type held"; meeting_id = $meetingId }
+    }
+
+    return $meeting
+}
+
+Export-ModuleMember -Function *

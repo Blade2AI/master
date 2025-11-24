@@ -1,0 +1,94 @@
+﻿# modules/Vibrational-Triad.psm1
+# Vibrational Triad: Gatherer, Filter, Advisor (minimal, stub implementations)
+
+function Invoke-VibrationalTriad {
+    [CmdletBinding()]
+    param(
+        [int]$SampleLimit = 100
+    )
+
+    # Ensure output paths
+    $base = "C:\BladeOps"
+    if (-not (Test-Path $base)) { New-Item -ItemType Directory -Path $base -Force | Out-Null }
+    $outDir = Join-Path $base "Vibration"
+    if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+
+    # Gatherer: collect candidate tasks / projects (stub: scan Projects dir)
+    $projectsDir = Join-Path $base "Projects"
+    $candidates = @()
+    if (Test-Path $projectsDir) {
+        Get-ChildItem -Path $projectsDir -Filter "*.json" -ErrorAction SilentlyContinue | Select-Object -First $SampleLimit | ForEach-Object {
+            try {
+                $p = Get-Content $_.FullName -Raw | ConvertFrom-Json
+                $candidates += $p
+            } catch {
+                # ignore
+            }
+        }
+    }
+
+    # If no projects, produce synthetic tasks
+    if ($candidates.Count -eq 0) {
+        $candidates = @(
+            [pscustomobject]@{ id = 'TASK-EXAMPLE-1'; title = 'Administrative emails'; type = 'Task' },
+            [pscustomobject]@{ id = 'PROJ-EXAMPLE-1'; title = 'Reduce changeover time'; type = 'Project' },
+            [pscustomobject]@{ id = 'TASK-EXAMPLE-2'; title = 'Refactor auth module'; type = 'Task' }
+        )
+    }
+
+    # Filter: score each item by a simple heuristic (stub)
+    $resonanceMap = @()
+    foreach ($item in $candidates) {
+        # Naive scoring: projects get higher base, tasks lower; title length and keywords influence
+        $baseScore = if ($item.type -match "Project") { 7 } else { 5 }
+        $title = ($item.title -as [string])
+        if ($title -match "admin|email|paperwork|compliance") { $baseScore -= 3 }
+        if ($title -match "changeover|refactor|architecture|design") { $baseScore += 2 }
+        $score = [Math]::Max(0.0, [Math]::Round($baseScore + (Get-Random -Minimum -1 -Maximum 2),1))
+
+        $resonanceMap += [pscustomobject]@{
+            id = ($item.id -or $item.title)
+            title = ($item.title -or "<unnamed>")
+            type = ($item.type -or "Unknown")
+            vibration_score = $score
+        }
+    }
+
+    # Advisor: produce simple guidance list (highest scoring items)
+    $high = $resonanceMap | Sort-Object -Property vibration_score -Descending | Select-Object -First 5
+    $neutral = $resonanceMap | Where-Object { $_.vibration_score -ge 4 -and $_.vibration_score -lt 7 }
+    $low = $resonanceMap | Where-Object { $_.vibration_score -lt 4 }
+
+    $summary = [pscustomobject]@{
+        Timestamp = (Get-Date).ToString("o")
+        HighCount = $high.Count
+        NeutralCount = $neutral.Count
+        LowCount = $low.Count
+        TopRecommendations = ($high | Select-Object id,title,vibration_score)
+        ResonanceMap = $resonanceMap
+    }
+
+    # Persist a snapshot
+    $outFile = Join-Path $outDir ("vibration_snapshot_{0}.json" -f ((Get-Date).ToString('yyyyMMdd_HHmmss')))
+    $summary | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $outFile -Encoding UTF8
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        Log-GovernanceEvent @{ type = 'VIBRATION_SNAPSHOT'; message = "Vibrational triad snapshot saved"; path = $outFile }
+    }
+
+    return $summary
+}
+
+function Analyze-VibrationImpact {
+    param(
+        [Parameter(Mandatory=$true)][string]$Metric
+    )
+    # Stub: return a basic analysis structure
+    return [pscustomobject]@{
+        metric = $Metric
+        impact = "UNKNOWN"
+        recommendation = "Run Invoke-VibrationalTriad and correlate with $Metric"
+    }
+}
+
+Export-ModuleMember -Function *

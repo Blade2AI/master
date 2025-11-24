@@ -1,0 +1,52 @@
+﻿# ??? Sovereign Stack Status
+[![Continuous Assurance Status](https://github.com/PrecisePointway/master/actions/workflows/continuous-assurance.yml/badge.svg)](https://github.com/PrecisePointway/master/actions/workflows/continuous-assurance.yml)
+
+Cryptographic ledger integrity is continuously verified (hash + rogue file check) via scheduled CI. Any drift invalidates the build.
+
+# master
+Project management file
+
+## Governance script: `sovereign.ps1`
+A single-file PowerShell governance stack is available at `scripts/sovereign.ps1`.
+
+Quickstart (Windows, elevated PowerShell recommended):
+
+```powershell
+# First time setup (creates directories, keys, initial attestation)
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\sovereign.ps1 -Action setup
+
+# Daily security check
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\sovereign.ps1 -Action security
+
+# Run full governance stack
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\sovereign.ps1 -Action full
+```
+
+See `docs/audit/DEPENDENCY_MANIFEST_APPENDIX.md` for dependency manifest governance and CI details.
+
+## Compliance & Tamper Evidence
+This repository includes an automated compliance and tamper-evidence pack:
+
+- `scripts/BuildAndTest.ps1`: Builds verifier (libsodium-enabled) and runs tests.
+- `scripts/TamperEvidenceDemo.ps1`: Demonstrates deterministic tamper overwrite, SHA256 diff, and Merkle root change; emits JSON artifact.
+- `docs/dashboard.yaml` / `docs/dashboard.mmd`: Regulator-facing summary + Mermaid diagram.
+- `docs/portal_wireframe.md`: Wireframe specification for compliance portal.
+- `docs/evidence_schema.json`: JSON schema for drill-down evidence bundles.
+- `docs/requirements_traceability.md`: Initial scaffold for clause-to-artifact mapping.
+- GitHub Actions workflow `.github/workflows/compliance.yml`: Nightly + on-push build, tamper demo, static analysis, artifact archival.
+
+### Running Locally
+```powershell
+# Build and test
+pwsh -File scripts/BuildAndTest.ps1
+# Run tamper evidence demonstration
+pwsh -File scripts/TamperEvidenceDemo.ps1
+```
+Artifacts are written under `logs/tamper/` and can be extended with signature sealing.
+
+### CI Outputs
+- Tamper evidence JSON (`tamper_evidence.json`)
+- Static analysis report (`cppcheck_report.xml`)
+- Future: signed bundles and compliance clause logs.
+
+> Extend `VerificationHarness.ps1` (to be added) to populate `logs/compliance/*.json` per standard and link Merkle + signature verification per artifact.

@@ -1,0 +1,156 @@
+﻿# SOVEREIGN NODE LAW v1.0
+
+Effective: Immediately  
+Jurisdiction: Local Sovereign System (Andy)
+
+---
+
+## Article 1 — Node Roles
+
+- **PC4 = Sovereign Node 0**
+  - Runs Docker and docker-compose.
+  - Runs all sovereign scripts:
+    - `sovereign_up.py`
+    - `integration_verify.sh`
+    - `healthcheck.py`
+    - agents (`evidence_validator.py`, `property_analyst.py`, etc.)
+  - Holds all runtime data:
+    - `Evidence/`
+    - `Property/`
+    - `data/ledger/`
+  - Is the **only** machine that may write to the sovereign ledger.
+
+- **PC5 = Viewport Only**
+  - No Docker.
+  - No sovereign agents.
+  - No `Evidence/`, `Property/`, or `data/ledger/` directories.
+  - May only:
+    - Remote into PC4 (RDP/SSH/VS Code Remote).
+    - View dashboards, logs, and reports exposed by PC4.
+  - Treat as “eyes only” — no sovereign state is allowed to live here.
+
+---
+
+## Article 2 — Repo & Data Separation (PC4)
+
+The git repository on PC4 **must only** contain code, configs, prompts, and docs.
+
+Runtime data **must never** be committed.
+
+Minimum `.gitignore`:
+
+```gitignore
+# Sovereign runtime data (never commit)
+data/
+Evidence/
+Property/
+Governance/Logs/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# VS Code
+.vscode/
+.history/
+```
+
+Rule:
+
+> If a file contains real-world evidence, property details, or ledger entries,
+> it belongs in `data/`, `Evidence/`, or `Property/`, **never in git**.
+
+---
+
+## Article 3 — Operational Loop (PC4 Only)
+
+All sovereign operations **MUST** be executed on PC4.
+
+Standard loop:
+
+```bash
+# Boot sovereign runtime
+python3 sovereign_up.py
+
+# Verify integration (tracks, volumes, router, ledger)
+./integration_verify.sh
+
+# Ongoing health monitoring
+watch -n 60 python3 healthcheck.py
+```
+
+Evidence flow (PC4):
+
+* Drop files into: `Evidence/Inbox/`
+* Evidence agent processes → `_drafts` (Insider) or `_verified` (Stable)
+* Approvals via:
+
+  * VS Code Sovereign extension, or
+  * Manual file promotion as per SOP
+
+Property flow (PC4):
+
+* Drop leads into: `Property/Leads/`
+* Property agent writes → `Property/Scored/_drafts/` (Insider)
+* Promotion to Stable only after readiness/protocol criteria are met.
+
+---
+
+## Article 4 — PC5 Restrictions
+
+On PC5, it is **forbidden** to:
+
+* Install or run Docker for sovereign workloads.
+* Create or mount:
+
+  * `Evidence/`
+  * `Property/`
+  * `data/ledger/`
+* Run any sovereign scripts:
+
+  * `sovereign_up.py`
+  * `integration_verify.sh`
+  * `healthcheck.py`
+  * any agent under `src/agents/`
+
+Permitted uses of PC5:
+
+* Remote display for PC4 (RDP/SSH/VS Code Remote).
+* Viewing read-only reports and dashboards rendered from PC4.
+* Reading repo **code-only** clone without runtime data.
+
+---
+
+## Article 5 — Violation Handling
+
+If any sovereign data or agents are found on PC5:
+
+1. **Immediate action**:
+
+   * Stop all processes on PC5.
+   * Remove `Evidence/`, `Property/`, and `data/ledger/` directories from PC5.
+2. **Record incident** (on PC4):
+
+   * Append an event to the sovereign ledger:
+
+     * `event_type: "NODE_LAW_VIOLATION"`
+     * `node: "PC5"`
+     * `action_taken: "data_removed + process_stopped"`
+3. **Review**:
+
+   * Confirm docker and agents only run on PC4.
+   * Re-affirm this document as controlling law.
+
+---
+
+## Article 6 — Authority
+
+* This document is the controlling local law for node roles.
+* Any future orchestration, deployment, or automation must respect:
+
+  * **PC4 = only sovereign execution environment**
+  * **PC5 = display / viewport only**

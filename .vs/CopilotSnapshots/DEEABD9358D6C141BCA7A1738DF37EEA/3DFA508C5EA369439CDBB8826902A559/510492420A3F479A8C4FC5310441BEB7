@@ -1,0 +1,62 @@
+﻿cmake_minimum_required(VERSION 3.10)
+project(verify_evidence CXX)
+
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(VerifyEvidenceLib STATIC VerifyEvidenceLib.cpp VerifyEvidenceLib.h)
+
+# Robust libsodium detection for Windows/MSVC static builds
+if (DEFINED ENV{LIBSODIUM_ROOT})
+    set(LIBSODIUM_ROOT $ENV{LIBSODIUM_ROOT})
+    set(LIBSODIUM_INC "${LIBSODIUM_ROOT}/include")
+    set(LIBSODIUM_LIB "")
+    # Search all common static lib paths
+    foreach(subdir
+        x64/Release/v143/static
+        x64/Release/v142/static
+        x64/Debug/v143/static
+        x64/Debug/v142/static
+        x64/Release/v143/dynamic
+        x64/Release/v142/dynamic
+        x64/Debug/v143/dynamic
+        x64/Debug/v142/dynamic
+        x64/Release/static
+        x64/Debug/static
+        lib
+    )
+        if (EXISTS "${LIBSODIUM_ROOT}/${subdir}/libsodium.lib")
+            set(LIBSODIUM_LIB "${LIBSODIUM_ROOT}/${subdir}/libsodium.lib")
+            message(STATUS "Found libsodium.lib at ${LIBSODIUM_LIB}")
+            break()
+        endif()
+    endforeach()
+    if (LIBSODIUM_LIB AND EXISTS ${LIBSODIUM_INC})
+        message(STATUS "Using libsodium include: ${LIBSODIUM_INC}")
+        target_include_directories(VerifyEvidenceLib PRIVATE ${LIBSODIUM_INC})
+        target_link_libraries(VerifyEvidenceLib ${LIBSODIUM_LIB})
+        target_compile_definitions(VerifyEvidenceLib PRIVATE SODIUM_AVAILABLE)
+    else()
+        message(WARNING "libsodium not found at LIBSODIUM_ROOT: ${LIBSODIUM_ROOT}")
+    endif()
+endif()
+
+add_executable(Verify-Evidence Verify-Evidence.cpp)
+target_link_libraries(Verify-Evidence PRIVATE VerifyEvidenceLib)
+if (TARGET VerifyEvidenceLib)
+    get_target_property(_defs VerifyEvidenceLib COMPILE_DEFINITIONS)
+    if (_defs MATCHES "SODIUM_AVAILABLE")
+        target_compile_definitions(Verify-Evidence PRIVATE SODIUM_AVAILABLE)
+    endif()
+endif()
+
+enable_testing()
+add_executable(verify_evidence_tests tests/verify_evidence_tests.cpp)
+target_link_libraries(verify_evidence_tests PRIVATE VerifyEvidenceLib)
+if (TARGET VerifyEvidenceLib)
+    get_target_property(_defs VerifyEvidenceLib COMPILE_DEFINITIONS)
+    if (_defs MATCHES "SODIUM_AVAILABLE")
+        target_compile_definitions(verify_evidence_tests PRIVATE SODIUM_AVAILABLE)
+    endif()
+endif()
+add_test(NAME verify_evidence_tests COMMAND verify_evidence_tests)

@@ -1,0 +1,23 @@
+﻿param(
+  [string]$ScriptPath = "$PSScriptRoot\\SelfHealAutomation.ps1",
+  [string]$TaskName = "SelfHeal Automation",
+  [switch]$AuditOnly,
+  [int]$IntervalSec = 300
+)
+
+# Normalize path
+$full = Resolve-Path -Path $ScriptPath -ErrorAction SilentlyContinue
+if (-not $full) { throw "Script not found: $ScriptPath" }
+$full = $full.Path
+
+$argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"$full")
+if ($AuditOnly) { $argList += '-AuditOnly' }
+$argList += @('-IntervalSec',"$IntervalSec")
+$quotedArgs = ($argList | ForEach-Object { if ($_ -match ' ') { '"' + $_ + '"' } else { $_ } }) -join ' '
+$cmd = "powershell $quotedArgs"
+
+# Create or update task
+schtasks /Create /TN "$TaskName" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "$cmd" /F | Out-Null
+
+Write-Host "Scheduled task '$TaskName' created/updated to run at startup as SYSTEM."
+Write-Host "Command: $cmd"

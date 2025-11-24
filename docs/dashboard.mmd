@@ -1,0 +1,15 @@
+flowchart TD
+    subgraph Dashboard["Regulator Compliance Dashboard"]
+        Standards["?? Standards Matrix"]
+        Tamper["?? Tamper Evidence Tests"]
+        Summary["?? Summary: 5 Pass | 2 Warn | 0 Fail"]
+    end
+    Standards --> Summary
+    Tamper --> Summary
+
+    subgraph TamperDetails["Tamper Drill?Down"]
+        T1["Evidence2.txt Hash Diff ?"]
+        T2["Evidence3.txt Modified ?"]
+        T3["Merkle Root Changed ?"]
+    end
+    Tamper --> TamperDetails

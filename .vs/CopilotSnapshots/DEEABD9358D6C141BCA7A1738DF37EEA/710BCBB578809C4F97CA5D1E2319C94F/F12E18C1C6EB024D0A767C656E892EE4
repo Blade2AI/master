@@ -1,0 +1,39 @@
+﻿#pragma once
+
+#include <string>
+#include <vector>
+#include <cstddef>
+
+// Compute SHA256 of input data (uses libsodium when available in implementation)
+std::vector<unsigned char> compute_sha256(const std::string &data);
+
+// Compute Merkle root hex string for a list of file paths
+std::string compute_merkle_root_from_files(const std::vector<std::string>& paths);
+
+// Load public key from file (hex or raw). Returns empty vector on error and sets err message.
+std::vector<unsigned char> load_pubkey_from_file(const std::string &path, std::string &err);
+
+// Verify Ed25519 signature (requires libsodium at link-time). Returns true if valid.
+bool verify_signature_ed25519(const std::vector<unsigned char>& pubkey,
+                              const std::vector<unsigned char>& sig,
+                              const std::string& message);
+
+// ---------------- Batch Merkle Proof API ----------------
+// A minimal batch proof capturing the leaf indices, leaf hashes (hex), the root, and the auxiliary sibling hashes
+struct BatchMerkleProof {
+    std::string rootHex;                    // Hex root of the Merkle tree
+    std::vector<size_t> leafIndices;        // Original indices of target leaves
+    std::vector<std::string> leafHashesHex; // Hex SHA256 hashes of each target leaf (file content)
+    std::vector<std::string> auxSiblingsHex;// Ordered auxiliary sibling hashes needed to reconstruct the path set
+};
+
+// Build a batch Merkle proof over file paths for the given target leaf indices.
+// paths: list of file paths (leaf data sources)
+// targetIndices: indices into paths to include in batch proof
+// Returns BatchMerkleProof with minimal sibling set (no duplicates for shared parents)
+BatchMerkleProof build_batch_merkle_proof(const std::vector<std::string>& paths,
+                                          const std::vector<size_t>& targetIndices);
+
+// Verify a previously built batch Merkle proof. Recomputes the combined root from leaves + aux siblings.
+// Returns true if proof is valid (root matches and all indices within bounds assumptions).
+bool verify_batch_merkle_proof(const BatchMerkleProof& proof);

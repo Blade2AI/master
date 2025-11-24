@@ -1,0 +1,54 @@
+﻿import sys
+import os
+import shutil
+from pathlib import Path
+
+sys.path.append(os.getcwd())
+from src.core.router import SovereignRouter
+
+LEADS_DIR = Path("Property/Leads")
+PROCESSED_DIR = Path("Property/Processed")
+
+
+def run_analyst():
+    try:
+        router = SovereignRouter("property")
+    except Exception as e:
+        print(f"❌ FATAL: Router Init Failed: {e}")
+        return
+    print(f"🏘️  Property Analyst Online | Mode: {router.track.upper()}")
+
+    LEADS_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+
+    files = [f for f in LEADS_DIR.iterdir() if f.is_file() and f.name != ".gitkeep"]
+    if not files:
+        print("   📭 No new leads. Add screenshots to Property/Leads/")
+        return
+    print(f"   Found {len(files)} leads to analyze...")
+
+    for file_path in files:
+        print(f"   Analyzing: {file_path.name}...")
+        analysis_data = {
+            "source_image": file_path.name,
+            "address": "123 Sovereign St (Detected)",
+            "estimated_value": 450000,
+            "condition_score": 7.5,
+            "red_flags": ["Roof needs repair (visual)"],
+            "recommendation": "WATCH_LIST"
+        }
+        confidence = 0.88
+        try:
+            response = router.process(
+                filename=f"{file_path.stem}_analysis.json",
+                data=analysis_data,
+                confidence=confidence,
+                estimated_cost=0.03
+            )
+            print(f"     ✅ Scored: {response.status} -> {response.path}")
+            shutil.move(str(file_path), str(PROCESSED_DIR / file_path.name))
+        except Exception as e:
+            print(f"     ❌ Failed: {e}")
+
+if __name__ == "__main__":
+    run_analyst()

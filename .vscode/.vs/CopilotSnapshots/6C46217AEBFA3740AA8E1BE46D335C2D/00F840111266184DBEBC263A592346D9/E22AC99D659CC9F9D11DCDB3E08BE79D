@@ -1,0 +1,172 @@
+﻿param(
+    [string]$NasRoot = "\\dxp4800plus-67ba\ops",
+    [string]$WorkspacePath = "",
+    [switch]$AutoOpen,
+    [int]$RetryAttempts = 5,
+    [int]$RetryDelaySec = 10
+)
+
+#region Configuration and Setup
+$logDir = Join-Path $env:USERPROFILE "LiveShareLogs"
+if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logFile = Join-Path $logDir "LiveShare_Guest_$timestamp.log"
+$linkFile = Join-Path $NasRoot "LiveShareLink.txt"
+$statusFile = Join-Path $NasRoot "LiveShareStatus.json"
+
+# Helper function for logging
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $time = Get-Date -Format "HH:mm:ss"
+    $entry = "[$time] [$Level] $Message"
+    Write-Host $entry -ForegroundColor $(switch($Level) { "ERROR" {"Red"} "WARN" {"Yellow"} "SUCCESS" {"Green"} default {"White"} })
+    Add-Content -Path $logFile -Value $entry
+}
+#endregion
+
+try {
+    Write-Log "▶️ Starting Live Share guest join process on $env:COMPUTERNAME" "SUCCESS"
+    
+    # Check NAS connectivity
+    if (-not (Test-Path $NasRoot)) {
+        Write-Log "❌ Cannot access NAS at $NasRoot - check network connectivity" "ERROR"
+        exit 1
+    }
+    
+    # Check if Live Share extension is installed
+    $liveShareCheck = & code --list-extensions 2>$null | Where-Object { $_ -match "ms-vsliveshare" }
+    if (-not $liveShareCheck) {
+        Write-Log "❌ Live Share extension not found. Installing..." "WARN"
+        try {
+            & code --install-extension ms-vsliveshare.vsliveshare --force
+            Write-Log "✅ Live Share extension installed. Please restart VS Code and run this script again." "SUCCESS"
+            exit 0
+        } catch {
+            Write-Log "❌ Failed to install Live Share extension: $_" "ERROR"
+            exit 1
+        }
+    }
+    
+    # Wait for and retrieve the Live Share link
+    Write-Log "🔍 Looking for Live Share session..."
+    $link = $null
+    $attempt = 0
+    
+    while (-not $link -and $attempt -lt $RetryAttempts) {
+        $attempt++
+        
+        # Check status file first for more info
+        if (Test-Path $statusFile) {
+            try {
+                $status = Get-Content $statusFile | ConvertFrom-Json
+                if ($status.Status -eq "Active" -and $status.Link) {
+                    $link = $status.Link
+                    Write-Log "📊 Found active session from status file" "SUCCESS"
+                    Write-Log "   Host: $($status.Host)"
+                    Write-Log "   Started: $($status.Timestamp)"
+                    if ($status.Workspace) { Write-Log "   Workspace: $($status.Workspace)" }
+                    break
+                }
+            } catch {
+                Write-Log "Could not parse status file: $_" "WARN"
+            }
+        }
+        
+        # Fallback: check link file
+        if (Test-Path $linkFile) {
+            try {
+                $linkContent = Get-Content $linkFile -Raw
+                if ($linkContent -match 'https://[^\s]*liveshare[^\s]*') {
+                    $link = $linkContent.Trim()
+                    Write-Log "📋 Found session link from link file" "SUCCESS"
+                    break
+                }
+            } catch {
+                Write-Log "Could not read link file: $_" "WARN"
+            }
+        }
+        
+        if (-not $link) {
+            Write-Log "⏳ No active session found. Waiting... (attempt $attempt/$RetryAttempts)"
+            Start-Sleep -Seconds $RetryDelaySec
+        }
+    }
+    
+    if (-not $link) {
+        Write-Log "❌ No Live Share session found after $RetryAttempts attempts" "ERROR"
+        Write-Log "💡 Make sure the host has started a session and shared the link" "INFO"
+        exit 1
+    }
+    
+    Write-Log "🔗 Live Share link found: $link" "SUCCESS"
+    
+    # Determine workspace path if not provided
+    if (-not $WorkspacePath) {
+        # Try to get from status file
+        if (Test-Path $statusFile) {
+            try {
+                $status = Get-Content $statusFile | ConvertFrom-Json
+                if ($status.Workspace) {
+                    $WorkspacePath = $status.Workspace
+                    Write-Log "📁 Using workspace from host: $WorkspacePath"
+                }
+            } catch { }
+        }
+        
+        # Fallback to current directory
+        if (-not $WorkspacePath) {
+            $WorkspacePath = Get-Location
+            Write-Log "📁 Using current directory: $WorkspacePath"
+        }
+    }
+    
+    # Open VS Code if requested or if not already running the project
+    if ($AutoOpen) {
+        Write-Log "🚀 Opening VS Code with workspace: $WorkspacePath"
+        try {
+            Start-Process code -ArgumentList "`"$WorkspacePath`""
+            Start-Sleep -Seconds 8  # Give VS Code time to start
+        } catch {
+            Write-Log "Failed to start VS Code: $_" "WARN"
+        }
+    }
+    
+    # Join the Live Share session
+    Write-Log "🤝 Joining Live Share session..."
+    try {
+        $joinResult = & code --command liveshare.join "$link" 2>&1
+        Write-Log "Join command executed: $joinResult"
+        
+        # Give it a moment to connect
+        Start-Sleep -Seconds 5
+        
+        # Verify connection
+        $sessionDetails = & code --command liveshare.showSessionDetails 2>$null
+        if ($sessionDetails -and $sessionDetails -notmatch "No active session") {
+            Write-Log "✅ Successfully joined Live Share session!" "SUCCESS"
+            Write-Log "🔧 You now have access to:"
+            Write-Log "   - Shared code editing"
+            Write-Log "   - Shared terminal sessions"
+            Write-Log "   - Shared debugging"
+            Write-Log "   - C++14 build environment"
+            Write-Log ""
+            Write-Log "💡 Check VS Code status bar for session info"
+            Write-Log "💡 Use Ctrl+Shift+P > 'Live Share' for more options"
+        } else {
+            Write-Log "⚠️  Join command completed but session status unclear" "WARN"
+            Write-Log "Check VS Code manually - you may still be connected"
+        }
+        
+    } catch {
+        Write-Log "❌ Failed to join Live Share session: $_" "ERROR"
+        Write-Log "💡 Try joining manually: code --command liveshare.join $link" "INFO"
+        exit 1
+    }
+    
+} catch {
+    Write-Log "❌ An error occurred: $_" "ERROR"
+    Write-Log $_.ScriptStackTrace "ERROR"
+} finally {
+    Write-Log "🏁 Guest join process completed"
+}

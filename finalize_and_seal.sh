@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# =============================================
+# Final Digital Dominion Lock (v1.1)
+# Combines: integrity manifest sealing + ledger subtraction + hash seal + annotated tag.
+# =============================================
+
+TAG="${TAG:-v1.0-digital-dominion}"
+MANIFEST="${MANIFEST:-docs/audit/INTEGRITY_MANIFEST.md}"
+LEDGER_INPUT="${LEDGER_INPUT:-FINAL_LEDGER_OUTPUT/Fleet_HistoricalIP_Ledger.csv}"
+LEDGER_DELETE="${LEDGER_DELETE:-FINAL_LEDGER_OUTPUT/Fleet_ColdStorage_Delete.csv}"
+LEDGER_CLEAN_NAME="${LEDGER_CLEAN_NAME:-Fleet_HistoricalIP_Ledger_CLEAN.csv}"
+LEDGER_DIR="${LEDGER_DIR:-FINAL_LEDGER_OUTPUT}"
+LEDGER_CLEAN_PATH="${LEDGER_DIR}/${LEDGER_CLEAN_NAME}"
+LEDGER_HASH_PATH="${LEDGER_HASH_PATH:-${LEDGER_CLEAN_PATH}.hash.txt}"
+RUN_LEDGER="${RUN_LEDGER:-true}"    # set RUN_LEDGER=false to skip ledger section
+
+# Sealed script targets (adjust if paths differ)
+FILES=(
+  "scripts/deep_forge_scanner_SEALED.ps1"
+  "scripts/ai_models_scanner_SEALED.ps1"
+  "scripts/run_fleet_scan_SEALED.ps1"
+)
+
+printf '\n--- START: CONSTITUTIONAL ENFORCEMENT ---\n'
+echo "Tag target: ${TAG}"
+
+mkdir -p "$(dirname "$MANIFEST")"
+
+# --- Integrity Manifest Section -------------------------------------------------
+missing=()
+declare -A SIZE
+declare -A HASH
+for f in "${FILES[@]}"; do
+  if [[ -f "$f" ]]; then
+    SIZE["$f"]=$(wc -c <"$f" | tr -d ' ')
+    if command -v sha256sum >/dev/null 2>&1; then
+      HASH["$f"]=$(sha256sum "$f" | awk '{print $1}')
+    else
+      echo "sha256sum not found. Install coreutils or run from Git Bash." >&2
+      exit 1
+    fi
+  else
+    missing+=("$f")
+  fi
+done
+if (( ${#missing[@]} > 0 )); then
+  echo "Missing sealed files:" >&2
+  printf ' - %s\n' "${missing[@]}" >&2
+  exit 1
+fi
+
+COMMIT_SHA=$(git rev-parse HEAD)
+COMMIT_SUBJECT=$(git log -1 --pretty=%s)
+AUTHOR_NAME=$(git log -1 --pretty=%an)
+AUTHOR_EMAIL=$(git log -1 --pretty=%ae)
+COMMIT_DATE=$(git log -1 --date=iso-strict --pretty=%cd)
+TS_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+{
+  echo "# INTEGRITY_MANIFEST"
+  echo
+  echo "## Digital Dominion Seal"
+  echo "Tag: ${TAG}"
+  echo "Commit SHA: ${COMMIT_SHA}"
+  echo "Commit: ${COMMIT_SUBJECT}"
+  echo "Author: ${AUTHOR_NAME} <${AUTHOR_EMAIL}>"
+  echo "Timestamp (UTC): ${TS_UTC}"
+  echo
+  echo "## Sealed Scanner Scripts"
+  echo "| File | Size (bytes) | SHA256 |"
+  echo "|------|--------------:|--------|"
+  for f in "${FILES[@]}"; do
+    echo "| ${f} | ${SIZE[$f]} | ${HASH[$f]} |"
+  done
+  echo
+  echo "## Verification Commands"
+  echo '```'
+  for f in "${FILES[@]}"; do
+    echo "sha256sum ${f}"
+  done
+  echo '```'
+  echo
+  echo "## Change Policy"
+  echo "Any modification to sealed scripts requires updating this manifest and creating a new annotated tag (v1.<minor>-digital-dominion)."
+} > "$MANIFEST"
+
+# --- Ledger Finalization Section ------------------------------------------------
+if [[ "$RUN_LEDGER" == "true" ]]; then
+  echo "[Ledger] Starting subtraction + sealing..."
+  if [[ ! -f "$LEDGER_INPUT" ]]; then
+    echo "[Ledger] Input ledger missing: $LEDGER_INPUT" >&2; exit 1
+  fi
+  if [[ ! -f "$LEDGER_DELETE" ]]; then
+    echo "[Ledger] Delete list missing: $LEDGER_DELETE" >&2; exit 1
+  fi
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Finalize-SovereignLedger.ps1 \
+    -LedgerPath "$LEDGER_INPUT" -DeletePath "$LEDGER_DELETE"
+
+  if [[ ! -f "$LEDGER_CLEAN_PATH" ]]; then
+    echo "[Ledger] Clean ledger not produced: $LEDGER_CLEAN_PATH" >&2; exit 1
+  fi
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/seal_ledger_hash.ps1 \
+    -FilePath "$LEDGER_CLEAN_PATH"
+
+  if [[ ! -f "$LEDGER_HASH_PATH" ]]; then
+    # Accept either automatic naming <file>.hash.txt
+    ALT_HASH="${LEDGER_CLEAN_PATH}.hash.txt"
+    if [[ -f "$ALT_HASH" ]]; then
+      LEDGER_HASH_PATH="$ALT_HASH"
+    else
+      echo "[Ledger] Hash file missing: expected $LEDGER_HASH_PATH or $ALT_HASH" >&2; exit 1
+    fi
+  fi
+  echo "[Ledger] Sealed: $LEDGER_HASH_PATH"
+else
+  echo "[Ledger] RUN_LEDGER=false -> skipping ledger operations"
+fi
+
+# --- Git Commit / Tag -----------------------------------------------------------
+TO_STAGE=("$MANIFEST")
+if [[ "$RUN_LEDGER" == "true" ]]; then
+  TO_STAGE+=("$LEDGER_CLEAN_PATH" "$LEDGER_HASH_PATH")
+fi
+
+git add "${TO_STAGE[@]}"
+if ! git diff --cached --quiet; then
+  if [[ "$RUN_LEDGER" == "true" ]]; then
+    git commit -m "feat(ledger): Finalized ${TAG} ledger; integrity manifest updated."
+  else
+    git commit -m "docs(governance): update integrity manifest for ${TAG}"
+  fi
+else
+  echo "[Git] No changes to commit."
+fi
+
+if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+  echo "[Git] Tag ${TAG} already exists. Skipping tag creation." >&2
+else
+  git tag -a "${TAG}" -m "Final Sovereignty Seal: Digital Dominion Achieved. Estate Clean."
+fi
+
+git push origin main
+(git push origin "${TAG}" || true)
+
+# --- Verification ---------------------------------------------------------------
+
+echo "--- Verification ---"
+git tag -l | grep -F "${TAG}" || echo "[Verify] Tag not listed?" >&2
+git show "${TAG}" --name-only | grep -F "${LEDGER_CLEAN_NAME}" || echo "[Verify] Clean ledger not in tag commit?" >&2
+
+git commit --allow-empty -m "integrity probe" >/dev/null || true
+
+echo "? Digital Dominion lock complete. Tag: ${TAG}"

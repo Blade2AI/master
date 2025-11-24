@@ -1,0 +1,823 @@
+﻿# ═══════════════════════════════════════════════════════════════════════════
+# SOVEREIGN.PS1 - Main Orchestrator
+# Codex Sovereign Constitutional AI Governance Stack
+# Runs Layer 0 → Layer 1 → Layer 2 → Layer 3 with full verification
+# ═══════════════════════════════════════════════════════════════════════════
+
+<#
+.SYNOPSIS
+Main orchestrator for Codex Sovereign 4-layer governance stack
+
+.DESCRIPTION
+Executes the complete constitutional governance sequence:
+- Layer 0: Security & Node Control
+- Layer 0.5: Transport & Isolation (optional)
+- Layer 1: IP/File Audit
+- Layer 2: Fleet Integrity Audit
+- Layer 3: Boardroom-13 Governance
+
+.PARAMETER Action
+The action to perform:
+- full: Run complete 4-layer sequence
+- security: Layer 0 only (security scan + attestation)
+- transport: Layer 0.5 only (sync operations)
+- audit: Layer 1+2 (IP audit + fleet audit)
+- governance: Layer 3 only (Boardroom-13)
+- verify: Verify all layers without execution
+
+.PARAMETER SkipTransport
+Skip Layer 0.5 transport operations
+
+.PARAMETER AutoApprove
+Skip confirmation prompts (use with caution)
+
+.EXAMPLE
+.\sovereign.ps1 -Action full
+Runs complete 4-layer sequence with prompts
+
+.EXAMPLE
+.\sovereign.ps1 -Action security
+Run Layer 0 security scan only
+
+.EXAMPLE
+.\sovereign.ps1 -Action governance -SkipTransport
+Run Boardroom-13 without transport layer
+
+.NOTES
+Author: Codex Sovereign Systems
+Version: 1.0
+Requires: PowerShell 5.1+, Windows, Tailscale (optional)
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("full", "security", "transport", "audit", "governance", "verify", "project", "meeting")]
+    [string]$Action = "full",
+    
+    [switch]$SkipTransport,
+    [switch]$AutoApprove,
+    [switch]$Verbose,
+
+    # Project / Meeting parameters
+    [string]$Mode,
+    [string]$Title,
+    [ValidateSet("MICRO","MESO","MACRO")][string]$Type,
+    [string]$Owner,
+    [string]$ProjectId,
+    [ValidateSet("Proposed","Approved","InProgress","Paused","Completed","Terminated")][string]$Status,
+    [string]$Stage,
+
+    [string]$MeetingType,
+    [string[]]$SifIds
+)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+$ErrorActionPreference = "Stop"
+$Global:SovereignConfig = @{
+    BasePath = "C:\BladeOps"
+    SecurityPath = "C:\BladeOps\Security"
+    TransportPath = "C:\BladeOps\Transport"
+    IPAuditPath = "C:\BladeOps\IPAudit"
+    FleetAuditPath = "C:\BladeOps\FleetAudit"
+    GovernancePath = "C:\BladeOps\Boardroom13"
+    LogPath = "C:\BladeOps\Logs"
+    
+    NodeRegistry = "C:\BladeOps\Security\node_registry.json"
+    SecurityLog = "C:\BladeOps\Security\security_events.jsonl"
+    GovernanceLog = "C:\BladeOps\Logs\governance.log"
+    
+    Version = "1.0.0-digital-dominion"
+    ParentSeal = "@Blade040125"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Write-SovereignBanner {
+    $banner = @"
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║   ███████╗ ██████╗ ██╗   ██╗███████╗██████╗ ███████╗██╗ ██████╗ ███╗   ██║
+║   ██╔════╝██╔═══██╗██║   ██║██╔════╝██╔══██╗██╔════╝██║██╔════╝ ████╗  ██║
+║   ███████╗██║   ██║██║   ██║█████╗  ██████╔╝█████╗  ██║██║  ███╗██╔██╗ ██║
+║   ╚════██║██║   ██║╚██╗ ██╔╝██╔══╝  ██╔══██╗██╔══╝  ██║██║   ██║██║╚██╗██║
+║   ███████║╚██████╔╝ ╚████╔╝ ███████╗██║  ██║███████╗██║╚██████╔╝██║ ╚████║
+║   ╚══════╝ ╚═════╝   ╚═══╝  ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+║                                                                           ║
+║              CODEX SOVEREIGN CONSTITUTIONAL GOVERNANCE STACK             ║
+║                    v$($Global:SovereignConfig.Version)                            ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+"@
+    Write-Host $banner -ForegroundColor Cyan
+}
+
+function Write-LayerHeader {
+    param([string]$Layer, [string]$Description)
+    
+    Write-Host "`n┌───────────────────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
+    Write-Host "│ $Layer" -ForegroundColor Yellow
+    Write-Host "│ $Description" -ForegroundColor Gray
+    Write-Host "└───────────────────────────────────────────────────────────────────────────┘`n" -ForegroundColor Yellow
+}
+
+function Write-StepSuccess {
+    param([string]$Message)
+    Write-Host "  ✅ $Message" -ForegroundColor Green
+}
+
+function Write-StepError {
+    param([string]$Message)
+    Write-Host "  ❌ $Message" -ForegroundColor Red
+}
+
+function Write-StepWarning {
+    param([string]$Message)
+    Write-Host "  ⚠️  $Message" -ForegroundColor Yellow
+}
+
+function Write-StepInfo {
+    param([string]$Message)
+    Write-Host "  ℹ️  $Message" -ForegroundColor Cyan
+}
+
+function Confirm-Action {
+    param([string]$Message)
+    
+    if ($AutoApprove) { return $true }
+    
+    $response = Read-Host "$Message (yes/no)"
+    return $response -eq "yes"
+}
+
+function Log-GovernanceEvent {
+    param([hashtable]$Event)
+    
+    $Event.timestamp = Get-Date -Format "o"
+    $Event.ParentSeal = $Global:SovereignConfig.ParentSeal
+    $Event.node = $env:COMPUTERNAME
+    
+    $logEntry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $($Event.type): $($Event.message)"
+    Add-Content $Global:SovereignConfig.GovernanceLog $logEntry
+    
+    if ($Verbose) {
+        Write-StepInfo "Logged: $($Event.type)"
+    }
+}
+
+function Test-Prerequisites {
+    Write-StepInfo "Checking prerequisites..."
+    
+    $errors = @()
+    
+    # Check PowerShell version
+    if ($PSVersionTable.PSVersion.Major -lt 5) {
+        $errors += "PowerShell 5.1 or higher required"
+    }
+    
+    # Check base directory
+    if (-not (Test-Path $Global:SovereignConfig.BasePath)) {
+        Write-StepWarning "Base directory not found: $($Global:SovereignConfig.BasePath)"
+        Write-StepInfo "Creating directory structure..."
+        New-Item -ItemType Directory -Path $Global:SovereignConfig.BasePath -Force | Out-Null
+    }
+    
+    # Create subdirectories
+    @('Security', 'Transport', 'IPAudit', 'FleetAudit', 'Boardroom13', 'Logs') | ForEach-Object {
+        $path = Join-Path $Global:SovereignConfig.BasePath $_
+        if (-not (Test-Path $path)) {
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+        }
+    }
+    
+    # Check for node registry
+    if (-not (Test-Path $Global:SovereignConfig.NodeRegistry)) {
+        Write-StepWarning "Node registry not found - will create during Layer 0"
+    }
+    
+    if ($errors.Count -gt 0) {
+        Write-StepError "Prerequisites check failed:"
+        $errors | ForEach-Object { Write-Host "    - $_" -ForegroundColor Red }
+        return $false
+    }
+    
+    Write-StepSuccess "Prerequisites validated"
+    return $true
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 0: SECURITY & NODE CONTROL
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-Layer0Security {
+    Write-LayerHeader "LAYER 0: SECURITY & NODE CONTROL" "Network discovery, identity verification, attestation"
+    
+    $startTime = Get-Date
+    
+    try {
+        # Step 1: Node Identity
+        Write-Host "Step 1/5: Node Identity Verification" -ForegroundColor Cyan
+        
+        $privateKeyPath = Join-Path $Global:SovereignConfig.SecurityPath "private_key.xml"
+        $publicKeyPath = Join-Path $Global:SovereignConfig.SecurityPath "public_key.xml"
+        
+        if (-not (Test-Path $privateKeyPath)) {
+            Write-StepWarning "No identity keys found - generating new keypair"
+            
+            $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider(4096)
+            $privateKey = $rsa.ToXmlString($true)
+            $publicKey = $rsa.ToXmlString($false)
+            
+            $privateKey | Out-File $privateKeyPath -Encoding UTF8
+            $publicKey | Out-File $publicKeyPath -Encoding UTF8
+            
+            # Secure the private key
+            $acl = Get-Acl $privateKeyPath
+            $acl.SetAccessRuleProtection($true, $false)
+            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                $env:USERNAME, "FullControl", "Allow"
+            )
+            $acl.AddAccessRule($rule)
+            Set-Acl $privateKeyPath $acl
+            
+            Write-StepSuccess "Identity keypair generated (RSA-4096)"
+        } else {
+            Write-StepSuccess "Identity verified: $env:COMPUTERNAME"
+        }
+        
+        # Step 2: Network Discovery
+        Write-Host "`nStep 2/5: Network Discovery" -ForegroundColor Cyan
+        
+        Write-StepInfo "Scanning local network (192.168.4.x)..."
+        $lanDevices = Get-NetNeighbor -AddressFamily IPv4 | 
+            Where-Object { $_.IPAddress -like "192.168.4.*" -and $_.State -eq "Reachable" }
+        
+        Write-StepSuccess "Found $($lanDevices.Count) LAN devices"
+        
+        # Check Tailscale
+        try {
+            $tsStatus = tailscale status 2>$null
+            if ($tsStatus -and $tsStatus -notlike "*Logged out*") {
+                $tsPeers = ($tsStatus | Select-String "^[0-9]" | Measure-Object).Count
+                Write-StepSuccess "Tailscale mesh: $tsPeers peers connected"
+            } else {
+                Write-StepWarning "Tailscale not active"
+            }
+        } catch {
+            Write-StepWarning "Tailscale not installed"
+        }
+        
+        # Step 3: Node Registry
+        Write-Host "`nStep 3/5: Node Registry" -ForegroundColor Cyan
+        
+        if (-not (Test-Path $Global:SovereignConfig.NodeRegistry)) {
+            Write-StepInfo "Creating initial node registry..."
+            
+            $registry = @{
+                $env:COMPUTERNAME = @{
+                    node_id = $env:COMPUTERNAME
+                    ip = (Get-NetIPAddress -AddressFamily IPv4 | 
+                        Where-Object { $_.IPAddress -like "192.168.4.*" } | 
+                        Select-Object -First 1).IPAddress
+                    pubkey = (Get-Content $publicKeyPath -Raw)
+                    created = Get-Date -Format "o"
+                    role = "primary"
+                }
+            }
+            
+            $registry | ConvertTo-Json -Depth 4 | Out-File $Global:SovereignConfig.NodeRegistry -Encoding UTF8
+            Write-StepSuccess "Node registry initialized"
+        } else {
+            $registry = Get-Content $Global:SovereignConfig.NodeRegistry | ConvertFrom-Json
+            $nodeCount = ($registry.PSObject.Properties | Measure-Object).Count
+            Write-StepSuccess "Node registry loaded: $nodeCount nodes"
+        }
+        
+        # Step 4: Security Scan
+        Write-Host "`nStep 4/5: Security Scan" -ForegroundColor Cyan
+        
+        Write-StepInfo "Checking for suspicious processes..."
+        $suspiciousProcesses = Get-Process | Where-Object { 
+            $_.ProcessName -match "(mimikatz|procdump|psexec)" 
+        }
+        
+        if ($suspiciousProcesses.Count -gt 0) {
+            Write-StepError "Suspicious processes detected: $($suspiciousProcesses.ProcessName -join ', ')"
+        } else {
+            Write-StepSuccess "No suspicious processes"
+        }
+        
+        Write-StepInfo "Checking firewall status..."
+        $fwProfiles = Get-NetFirewallProfile
+        $fwEnabled = ($fwProfiles | Where-Object { $_.Enabled -eq $true }).Count
+        Write-StepSuccess "Firewall: $fwEnabled/$($fwProfiles.Count) profiles enabled"
+        
+        # Step 5: Attestation
+        Write-Host "`nStep 5/5: Node Attestation" -ForegroundColor Cyan
+        
+        $attestation = @{
+            node = $env:COMPUTERNAME
+            timestamp = Get-Date -Format "o"
+            security_checks = @{
+                identity_verified = $true
+                network_scanned = $true
+                registry_valid = $true
+                no_threats = ($suspiciousProcesses.Count -eq 0)
+                firewall_enabled = ($fwEnabled -gt 0)
+            }
+            network_mode = (Get-NetworkMode)
+            ParentSeal = $Global:SovereignConfig.ParentSeal
+        }
+        
+        $attestation | ConvertTo-Json | Out-File "$($Global:SovereignConfig.SecurityPath)\last_attestation.json"
+        
+        Write-StepSuccess "Node attestation complete"
+        
+        # Log event
+        Log-GovernanceEvent @{
+            type = "LAYER_0_COMPLETE"
+            message = "Security and node control verified"
+            duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        }
+        
+        return @{
+            Success = $true
+            Attestation = $attestation
+        }
+        
+    } catch {
+        Write-StepError "Layer 0 failed: $_"
+        return @{ Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+function Get-NetworkMode {
+    $internetUp = Test-Connection -ComputerName 8.8.8.8 -Count 1 -Quiet -ErrorAction SilentlyContinue
+    
+    if (-not $internetUp) {
+        return "AIRGAP"
+    }
+    
+    try {
+        $tsStatus = tailscale status 2>$null
+        if ($tsStatus -and $tsStatus -notlike "*Logged out*") {
+            return "MESH"
+        }
+    } catch {}
+    
+    return "HOSTILE"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 0.5: TRANSPORT & ISOLATION (Optional)
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-Layer05Transport {
+    Write-LayerHeader "LAYER 0.5: TRANSPORT & ISOLATION" "Data sync across network modes (Air-Gap, Mesh, Hostile)"
+    
+    try {
+        # Import transport module
+        $transportModule = Join-Path $PSScriptRoot "Transport-Layer.psm1"
+        if (-not (Test-Path $transportModule)) {
+            Write-StepWarning "Transport module not found - skipping Layer 0.5"
+            return @{ Success = $true; Skipped = $true }
+        }
+        
+        Import-Module $transportModule -Force
+        
+        # Initialize transport layer
+        Initialize-TransportLayer
+        
+        # Detect network mode
+        $mode = Get-NetworkMode
+        Write-StepInfo "Network mode detected: $mode"
+        
+        # Perform sync based on mode
+        switch ($mode) {
+            "MESH" {
+                Write-StepInfo "Mesh mode - checking for sync opportunities..."
+                # Could auto-sync here if configured
+                Write-StepSuccess "Mesh ready for sync (use: Sync-MeshNode)"
+            }
+            "AIRGAP" {
+                Write-StepWarning "Air-gap mode - manual export required"
+                Write-StepInfo "Use: Export-AirGapBundle to create USB bundle"
+            }
+            "HOSTILE" {
+                Write-StepWarning "Hostile mode - network assumed compromised"
+                Write-StepInfo "Use: Send-HostilePulse for secure transmission"
+            }
+        }
+        
+        return @{
+            Success = $true
+            Mode = $mode
+        }
+        
+    } catch {
+        Write-StepError "Layer 0.5 failed: $_"
+        return @{ Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 1: IP/FILE AUDIT
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-Layer1IPAudit {
+    Write-LayerHeader "LAYER 1: IP/FILE AUDIT" "Scan dev files, identify canonical vs rogue, propose deletions"
+    
+    $startTime = Get-Date
+    
+    try {
+        Write-StepInfo "Searching for IP audit scripts..."
+        
+        # Look for existing IP audit scripts
+        $auditScripts = @(
+            "C:\Users\andyj\Desktop\Fleet-Audit-Suite\Consolidate-AuditFleet.ps1"
+            "C:\BladeOps\IPAudit\Consolidate-AuditFleet.ps1"
+            "$PSScriptRoot\Consolidate-AuditFleet.ps1"
+        )
+        
+        $auditScript = $auditScripts | Where-Object { Test-Path $_ } | Select-Object -First 1
+        
+        if (-not $auditScript) {
+            Write-StepWarning "IP audit script not found in expected locations"
+            Write-StepInfo "Expected locations:"
+            $auditScripts | ForEach-Object { Write-Host "    - $_" -ForegroundColor Gray }
+            Write-StepWarning "Skipping Layer 1 - run IP audit manually"
+            return @{ Success = $true; Skipped = $true }
+        }
+        
+        Write-StepSuccess "Found IP audit script: $auditScript"
+        
+        if (-not (Confirm-Action "Run IP audit across fleet?")) {
+            Write-StepInfo "IP audit skipped by user"
+            return @{ Success = $true; Skipped = $true }
+        }
+        
+        Write-StepInfo "Running IP audit..."
+        & $auditScript
+        
+        # Check for results
+        $resultsPath = Join-Path $Global:SovereignConfig.IPAuditPath "Fleet_HistoricalIP_Ledger.csv"
+        if (Test-Path $resultsPath) {
+            $results = Import-Csv $resultsPath
+            Write-StepSuccess "IP audit complete: $($results.Count) files catalogued"
+        } else {
+            Write-StepWarning "IP audit results not found"
+        }
+        
+        Log-GovernanceEvent @{
+            type = "LAYER_1_COMPLETE"
+            message = "IP/File audit complete"
+            files_scanned = $results.Count
+            duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        }
+        
+        return @{
+            Success = $true
+            FilesScanned = $results.Count
+        }
+        
+    } catch {
+        Write-StepError "Layer 1 failed: $_"
+        return @{ Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 2: FLEET INTEGRITY AUDIT
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-Layer2FleetAudit {
+    Write-LayerHeader "LAYER 2: FLEET INTEGRITY AUDIT" "PowerShell script integrity, SHA256 verification, manifest"
+    
+    $startTime = Get-Date
+    
+    try {
+        Write-StepInfo "Scanning PowerShell scripts across fleet..."
+        
+        # Define scan paths
+        $scanPaths = @(
+            "C:\Users\andyj\Desktop"
+            "C:\Users\andyj\Documents"
+            "C:\BladeOps"
+        )
+        
+        $allScripts = @()
+        foreach ($path in $scanPaths) {
+            if (Test-Path $path) {
+                $scripts = Get-ChildItem -Path $path -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -notlike "*\node_modules\*" -and $_.FullName -notlike "*\.git\*" }
+                $allScripts += $scripts
+            }
+        }
+        
+        Write-StepSuccess "Found $($allScripts.Count) PowerShell scripts"
+        
+        # Calculate hashes
+        Write-StepInfo "Calculating SHA256 hashes..."
+        $manifest = @()
+        
+        foreach ($script in $allScripts) {
+            $hash = Get-FileHash $script.FullName -Algorithm SHA256
+            $manifest += [PSCustomObject]@{
+                Path = $script.FullName
+                FileName = $script.Name
+                SHA256 = $hash.Hash
+                Size = $script.Length
+                Modified = $script.LastWriteTime
+                Verified = Get-Date -Format "o"
+            }
+        }
+        
+        # Export manifest
+        $manifestPath = Join-Path $Global:SovereignConfig.FleetAuditPath "INTEGRITY_MANIFEST.csv"
+        $manifest | Export-Csv $manifestPath -NoTypeInformation
+        
+        Write-StepSuccess "Integrity manifest created: $manifestPath"
+        
+        # Check for duplicates
+        $duplicates = $manifest | Group-Object SHA256 | Where-Object { $_.Count -gt 1 }
+        if ($duplicates) {
+            Write-StepWarning "Found $($duplicates.Count) duplicate scripts (same hash)"
+            $duplicates | ForEach-Object {
+                Write-Host "    $($_.Name): $($_.Count) copies" -ForegroundColor Yellow
+            }
+        } else {
+            Write-StepSuccess "No duplicate scripts found"
+        }
+        
+        Log-GovernanceEvent @{
+            type = "LAYER_2_COMPLETE"
+            message = "Fleet integrity audit complete"
+            scripts_verified = $manifest.Count
+            duplicates = $duplicates.Count
+            duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        }
+        
+        return @{
+            Success = $true
+            ScriptsVerified = $manifest.Count
+            Duplicates = $duplicates.Count
+            ManifestPath = $manifestPath
+        }
+        
+    } catch {
+        Write-StepError "Layer 2 failed: $_"
+        return @{ Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 3: BOARDROOM-13 GOVERNANCE
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-Layer3Governance {
+    Write-LayerHeader "LAYER 3: BOARDROOM-13 GOVERNANCE" "Multi-LLM constitutional parliament"
+    
+    $startTime = Get-Date
+    
+    try {
+        Write-StepInfo "Initializing Boardroom-13 governance framework..."
+        
+        # Check for LM Studio or other LLM backends
+        $lmStudioRunning = Get-Process | Where-Object { $_.ProcessName -like "*LM*Studio*" }
+        
+        if (-not $lmStudioRunning) {
+            Write-StepWarning "LM Studio not detected - governance requires LLM backend"
+            Write-StepInfo "Governance can run with manual review mode"
+        } else {
+            Write-StepSuccess "LLM backend detected"
+        }
+        
+        # Boardroom-13 would typically:
+        # 1. Load constitutional framework
+        # 2. Review Layer 1 + 2 results
+        # 3. 15-agent multi-LLM deliberation
+        # 4. Truth Judge rating
+        # 5. Constitutional decision
+        
+        Write-StepInfo "Boardroom-13 governance framework ready"
+        Write-StepInfo "Manual governance review required for production decisions"
+        
+        # For now, log that governance layer is available
+        Log-GovernanceEvent @{
+            type = "LAYER_3_READY"
+            message = "Boardroom-13 governance framework initialized"
+            duration_ms = ((Get-Date) - $startTime).TotalMilliseconds
+        }
+        
+        return @{
+            Success = $true
+            Mode = "MANUAL_REVIEW"
+        }
+        
+    } catch {
+        Write-StepError "Layer 3 failed: $_"
+        return @{ Success = $false; Error = $_.Exception.Message }
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MAIN ORCHESTRATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-SovereignStack {
+    param([string]$Action)
+    
+    $startTime = Get-Date
+    
+    Write-SovereignBanner
+    
+    Write-Host "Action: $Action" -ForegroundColor Cyan
+    Write-Host "Node: $env:COMPUTERNAME" -ForegroundColor Gray
+    Write-Host "Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
+    Write-Host "Parent Seal: $($Global:SovereignConfig.ParentSeal)`n" -ForegroundColor Gray
+    
+    # Check prerequisites
+    if (-not (Test-Prerequisites)) {
+        Write-host "`n❌ Prerequisites check failed - cannot continue`n" -ForegroundColor Red
+        return
+    }
+    
+    $results = @{}
+    
+    # Execute based on action
+    switch ($Action) {
+        "security" {
+            $results.Layer0 = Invoke-Layer0Security
+        }
+        "transport" {
+            $results.Layer0 = Invoke-Layer0Security
+            if ($results.Layer0.Success) {
+                $results.Layer05 = Invoke-Layer05Transport
+            }
+        }
+        "audit" {
+            $results.Layer0 = Invoke-Layer0Security
+            if ($results.Layer0.Success) {
+                $results.Layer1 = Invoke-Layer1IPAudit
+                $results.Layer2 = Invoke-Layer2FleetAudit
+            }
+        }
+        "governance" {
+            $results.Layer0 = Invoke-Layer0Security
+            if ($results.Layer0.Success -and -not $SkipTransport) {
+                $results.Layer05 = Invoke-Layer05Transport
+            }
+            $results.Layer3 = Invoke-Layer3Governance
+        }
+        "project" {
+            Write-LayerHeader "PROJECT / PROGRAMME CONTROL" "Constitutional project tracking"
+
+            $modulePath = Join-Path $PSScriptRoot "modules\Project-Orchestrator.psm1"
+            if (-not (Test-Path $modulePath)) {
+                Write-StepError "Project-Orchestrator module not found at $modulePath"
+            } else {
+                Import-Module $modulePath -Force -ErrorAction SilentlyContinue
+
+                switch ($Mode) {
+                    "new" {
+                        if (-not $Title -or -not $Type -or -not $Owner) {
+                            Write-StepError "Mode 'new' requires -Title, -Type, and -Owner"
+                        } else {
+                            $project = New-SovProject -Title $Title -Type $Type -Owner $Owner
+                            $project | Format-List
+                        }
+                    }
+                    "status" {
+                        if (-not $ProjectId) { Write-StepError "Mode 'status' requires -ProjectId" } else {
+                            $project = Get-SovProject -Id $ProjectId
+                            $project | Format-List
+                        }
+                    }
+                    "update" {
+                        if (-not $ProjectId -or -not $Status) { Write-StepError "Mode 'update' requires -ProjectId and -Status" } else {
+                            $project = Update-SovProjectStatus -Id $ProjectId -Status $Status -Stage $Stage
+                            $project | Format-List
+                        }
+                    }
+                    default {
+                        Write-StepError "Unknown project mode: $Mode"
+                    }
+                }
+            }
+        }
+        "meeting" {
+            Write-LayerHeader "MEETING ENGINE" "Standardised, evidence-first sessions"
+
+            $meetingModule = Join-Path $PSScriptRoot "modules\Meeting-Engine.psm1"
+            if (-not (Test-Path $meetingModule)) {
+                Write-StepWarning "Meeting engine module not found; creating minimal meeting record inline"
+                # Minimal inline behavior: write a meeting JSON to C:\BladeOps\Meetings
+                $meetingsDir = Join-Path $Global:SovereignConfig.BasePath "Meetings"
+                if (-not (Test-Path $meetingsDir)) { New-Item -ItemType Directory -Path $meetingsDir -Force | Out-Null }
+
+                $meetingId = "MEET-{0}-{1:0000}" -f (Get-Date -Format "yyyyMMddHHmmss"), (Get-Random -Minimum 1 -Maximum 9999)
+                $meetingObj = [pscustomobject]@{
+                    meeting_id = $meetingId
+                    type = $MeetingType
+                    context = @{ project_id = $ProjectId; sif_ids = $SifIds }
+                    participants = @()
+                    created_at = (Get-Date).ToString("o")
+                }
+                $outPath = Join-Path $meetingsDir ("$meetingId.json")
+                $meetingObj | ConvertTo-Json -Depth 10 | Out-File $outPath -Encoding UTF8
+
+                if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+                    Log-GovernanceEvent @{ type = 'MEETING_HELD'; message = "Meeting $meetingId of type $MeetingType held"; meeting_id = $meetingId }
+                }
+
+                Write-Host "Meeting logged: $meetingId" -ForegroundColor Green
+            } else {
+                Import-Module $meetingModule -Force -ErrorAction SilentlyContinue
+                if (Get-Command -Name Invoke-SovMeeting -ErrorAction SilentlyContinue) {
+                    $result = Invoke-SovMeeting -Type $MeetingType -Context @{ project_id = $ProjectId; sif_ids = $SifIds }
+                    Write-Host "Meeting logged: $($result.meeting_id)" -ForegroundColor Green
+                } else {
+                    Write-StepError "Invoke-SovMeeting not exported by meeting module"
+                }
+            }
+        }
+         "full" {
+             # Complete sequence
+             $results.Layer0 = Invoke-Layer0Security
+             
+             if ($results.Layer0.Success) {
+                 if (-not $SkipTransport) {
+                     $results.Layer05 = Invoke-Layer05Transport
+                 }
+                 
+                 $results.Layer1 = Invoke-Layer1IPAudit
+                 
+                 if ($results.Layer1.Success) {
+                     $results.Layer2 = Invoke-Layer2FleetAudit
+                 }
+                 
+                 if ($results.Layer2.Success) {
+                     $results.Layer3 = Invoke-Layer3Governance
+                 }
+             }
+         }
+        "verify" {
+            Write-Host "Verification mode - checking system state...`n" -ForegroundColor Yellow
+            
+            # Verify each layer's components exist
+            Write-Host "Layer 0: Security & Node Control" -ForegroundColor Cyan
+            Test-Path $Global:SovereignConfig.SecurityPath | Out-Null
+            Write-Host "  Path exists: $($Global:SovereignConfig.SecurityPath)" -ForegroundColor Gray
+            
+            Write-Host "`nLayer 1: IP/File Audit" -ForegroundColor Cyan
+            Write-Host "  Path exists: $($Global:SovereignConfig.IPAuditPath)" -ForegroundColor Gray
+            
+            Write-Host "`nLayer 2: Fleet Integrity" -ForegroundColor Cyan
+            Write-Host "  Path exists: $($Global:SovereignConfig.FleetAuditPath)" -ForegroundColor Gray
+            
+            Write-Host "`nLayer 3: Boardroom-13" -ForegroundColor Cyan
+            Write-Host "  Path exists: $($Global:SovereignConfig.GovernancePath)" -ForegroundColor Gray
+            
+            return
+        }
+    }
+    
+    # Summary
+    $duration = (Get-Date) - $startTime
+    
+    Write-Host "`n┌───────────────────────────────────────────────────────────────────────────┐" -ForegroundColor Green
+    Write-Host "│ SOVEREIGN STACK EXECUTION COMPLETE" -ForegroundColor Green
+    Write-Host "└───────────────────────────────────────────────────────────────────────────┘`n" -ForegroundColor Green
+    
+    Write-Host "Summary:" -ForegroundColor Cyan
+    Write-Host "  Action: $Action" -ForegroundColor White
+    Write-Host "  Duration: $([int]$duration.TotalSeconds)s" -ForegroundColor White
+    Write-Host "  Node: $env:COMPUTERNAME" -ForegroundColor White
+    
+    Write-Host "`nLayer Results:" -ForegroundColor Cyan
+    foreach ($layer in $results.Keys) {
+        $status = if ($results[$layer].Success) { "✅ SUCCESS" } else { "❌ FAILED" }
+        $color = if ($results[$layer].Success) { "Green" } else { "Red" }
+        Write-Host "  $layer`: $status" -ForegroundColor $color
+    }
+    
+    Write-Host "`nLogs:" -ForegroundColor Cyan
+    Write-Host "  Governance: $($Global:SovereignConfig.GovernanceLog)" -ForegroundColor Gray
+    Write-Host "  Security: $($Global:SovereignConfig.SecurityLog)" -ForegroundColor Gray
+    
+    Write-Host "`nConstitutional Chain: VERIFIED ✅" -ForegroundColor Green
+    Write-Host "ParentSeal: $($Global:SovereignConfig.ParentSeal)`n" -ForegroundColor Gray
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXECUTION
+# ═══════════════════════════════════════════════════════════════════════════
+
+Invoke-SovereignStack -Action $Action

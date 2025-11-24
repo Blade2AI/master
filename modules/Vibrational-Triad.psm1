@@ -1,0 +1,163 @@
+# modules/Vibrational-Triad.psm1
+# Vibrational Triad: Gatherer ? Filter ? Advisor (robust, copy-ready)
+
+# Conditional imports (optional adapters)
+$govCore = Join-Path $PSScriptRoot 'Governance-Core.psm1'
+$edgeAdapter = Join-Path $PSScriptRoot 'EdgeLLM-Adapter.psm1'
+if (Test-Path $govCore) { Import-Module $govCore -Force -ErrorAction SilentlyContinue }
+if (Test-Path $edgeAdapter) { Import-Module $edgeAdapter -Force -ErrorAction SilentlyContinue }
+
+function Invoke-VT-Gatherer {
+    [CmdletBinding()]
+    param(
+        [string]$UserId = 'andy',
+        [datetime]$Now = (Get-Date)
+    )
+
+    Write-Host "`n?? GATHERER: Scanning environment..." -ForegroundColor Cyan
+    $inputs = @()
+
+    # Look for projects in common paths
+    $paths = @('C:\BladeOps\data\Projects','C:\BladeOps\Projects','C:\BladeOps\data\projects')
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            Get-ChildItem -Path $p -Filter 'PROJ-*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+                try { $proj = Get-Content $_.FullName -Raw | ConvertFrom-Json; $proj.PSPath = $_.FullName; $inputs += @{ Type='Project'; Source=$proj.id; Subject=$proj.title; Content=$proj; Raw=$proj } } catch { }
+            }
+        }
+    }
+
+    # SIF items
+    $sifPaths = @('C:\BladeOps\data\SIF','C:\BladeOps\SIF')
+    foreach ($sp in $sifPaths) {
+        if (Test-Path $sp) {
+            Get-ChildItem -Path $sp -Filter 'SIF-*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+                try { $s = Get-Content $_.FullName -Raw | ConvertFrom-Json; $inputs += @{ Type='SIF'; Source=$s.id; Subject = $s.description; Content=$s } } catch { }
+            }
+        }
+    }
+
+    # Mock emails (fallback)
+    $mock = @(
+        @{ Subject='Quarterly financial review meeting'; Body='Review Q4 financials and budget'; From='finance@company' },
+        @{ Subject='System architecture design session'; Body='Discuss microservice architecture'; From='tech@company' },
+        @{ Subject='Complete expense report forms'; Body='Please fill expense reports', From='hr@company' }
+    )
+    foreach ($e in $mock) { $inputs += @{ Type='Email'; Source=$e.From; Subject=$e.Subject; Content=$e.Body } }
+
+    Write-Host "  Inputs scanned: $($inputs.Count)" -ForegroundColor Gray
+    return $inputs
+}
+
+function Measure-VT-Vibration {
+    [CmdletBinding()]
+    param(
+        [string]$Content,
+        [string]$Subject = '',
+        [string]$Context = '',
+        [string]$Type = 'Task'
+    )
+
+    # Use edge adapter if available
+    if (Get-Command -Name Invoke-EdgeLLM -ErrorAction SilentlyContinue) {
+        $prompt = @"
+Analyze the content for energy alignment for a neurodivergent worker (ADHD).
+Respond with JSON: {"score":number,"level":"HIGH|NEUTRAL|LOW","indicators":[...],"reasoning":"..."}
+Content: $Content
+Subject: $Subject
+Context: $Context
+"@
+        try {
+            $resp = Invoke-EdgeLLM -Prompt $prompt -Backend 'Mock' -ErrorAction Stop
+            $json = $resp -replace '```json\s*','' -replace '```\s*',''
+            $obj = $json | ConvertFrom-Json
+            return @{ score = $obj.score; level = $obj.level; indicators = $obj.indicators; reasoning = $obj.reasoning }
+        } catch {
+            # fall back
+        }
+    }
+
+    # Heuristic fallback
+    $text = ($Subject + ' ' + $Content).ToLower()
+    $score = 5.0
+    if ($text -match 'design|architecture|refactor|optimi') { $score = 8.0 }
+    if ($text -match 'admin|expense|form|report') { $score = 2.0 }
+    $level = if ($score -ge 7) { 'HIGH' } elseif ($score -ge 4) { 'NEUTRAL' } else { 'LOW' }
+    $ind = @()
+    if ($level -eq 'HIGH') { $ind += 'creative; high impact' }
+    if ($level -eq 'LOW') { $ind += 'repetitive; low autonomy' }
+
+    return @{ score = $score; level = $level; indicators = $ind; reasoning = 'heuristic fallback' }
+}
+
+function Test-VT-ConstitutionalOverride {
+    param([hashtable]$Input)
+    $text = "$( $Input.Subject ) $($Input.Content)".ToLower()
+    $keywords = @('safety','incident','sif','emergency','compliance','audit','regulator','boardroom','truth test')
+    if ($Input.Type -eq 'SIF') { return $true }
+    foreach ($k in $keywords) { if ($text -match $k) { return $true } }
+    return $false
+}
+
+function Invoke-VT-Filter {
+    param([array]$Inputs)
+    Write-Host "`n?? FILTER: classifying inputs..." -ForegroundColor Magenta
+    $classified = @{ HighResonance=@(); Neutral=@(); LowResonance=@(); ConstitutionalOverrides=@() }
+    foreach ($i in $Inputs) {
+        # ensure vibrations measured
+        if (-not $i.VibrationLevel) {
+            $v = Measure-VT-Vibration -Content ($i.Content -as [string]) -Subject ($i.Subject -as [string]) -Type ($i.Type -as [string])
+            $i.VibrationScore = $v.score; $i.VibrationLevel = $v.level; $i.EnergyIndicators = $v.indicators
+        }
+        if (Test-VT-ConstitutionalOverride -Input $i) { $classified.ConstitutionalOverrides += $i; continue }
+        switch ($i.VibrationLevel) { 'HIGH' { $classified.HighResonance += $i } 'NEUTRAL' { $classified.Neutral += $i } default { $classified.LowResonance += $i } }
+    }
+    # log summary if available
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        Log-GovernanceEvent -Event @{ type='VIBRATIONAL_FILTERING'; user_id='andy'; high=$classified.HighResonance.Count; neutral=$classified.Neutral.Count; low=$classified.LowResonance.Count; constitutional=$classified.ConstitutionalOverrides.Count }
+    }
+    return $classified
+}
+
+function Generate-VT-Signals {
+    param([hashtable]$Classified)
+    $signals = @{ meeting_seeds=@(); sif_flags=@(); truthtest_flags=@(); programme_targets=@() }
+    foreach ($h in $Classified.HighResonance | Select-Object -First 3) { $signals.meeting_seeds += @{ title = $h.Subject; type='DAILY_CELL_STANDUP'; urgency=0.9; reason='High resonance' } }
+    foreach ($s in $Classified.ConstitutionalOverrides | Where-Object { $_.Type -eq 'SIF' }) { if ($s.Severity -ge 3) { $signals.sif_flags += @{ sif_id=$s.SifId; pattern='High severity'; risk='Immediate' } } }
+    if ($Classified.LowResonance.Count -gt ($Classified.HighResonance.Count * 1.5)) { $signals.truthtest_flags += @{ metric='Task_Composition'; reason='Low-vibration saturation' } }
+    $projTasks = $Classified.HighResonance | Where-Object { $_.Type -eq 'ProjectTask' }
+    $groups = $projTasks | Group-Object -Property ProjectId
+    foreach ($g in $groups | Select-Object -First 3) { $signals.programme_targets += @{ project_id=$g.Name; priority='HIGH'; reason='Energy+impact' } }
+    return $signals
+}
+
+function Invoke-VT-Advisor {
+    param([hashtable]$Classified,[datetime]$Now=(Get-Date))
+    Write-Host "`n?? ADVISOR: generating guidance..." -ForegroundColor Blue
+    $total = ($Classified.HighResonance.Count + $Classified.Neutral.Count + $Classified.LowResonance.Count)
+    $metrics = @{ vibration_score = if ($total -gt 0) { ((($Classified.HighResonance.Count*8.5)+($Classified.Neutral.Count*5)+($Classified.LowResonance.Count*2.5))/ $total) } else {5.0}; high_vibration_percentage = if ($total -gt 0) { [Math]::Round(($Classified.HighResonance.Count/$total)*100,1) } else {0} }
+    # Guidance via LLM if available
+    $guidance = ''
+    if (Get-Command -Name Invoke-EdgeLLM -ErrorAction SilentlyContinue) {
+        $prompt = "Advice: prioritize high vibration tasks and batch low vibration tasks."
+        try { $guidance = Invoke-EdgeLLM -Prompt $prompt -Backend 'Mock' } catch { $guidance = 'Guidance unavailable (LLM error)' }
+    } else { $guidance = 'Guidance unavailable (no LLM adapter) - prioritize HighResonance items.' }
+    $signals = Generate-VT-Signals -Classified $Classified
+    return @{ HighResonance=$Classified.HighResonance; Neutral=$Classified.Neutral; LowResonance=$Classified.LowResonance; ConstitutionalTasks=$Classified.ConstitutionalOverrides; Metrics=$metrics; Guidance=$guidance; Signals=$signals }
+}
+
+function Invoke-VibrationalTriad {
+    [CmdletBinding()]
+    param([string]$UserId='andy',[datetime]$Now=(Get-Date))
+    Write-Host "`n=== VIBRATIONAL TRIAD START ===" -ForegroundColor Magenta
+    $inputs = Invoke-VT-Gatherer -UserId $UserId -Now $Now
+    $classified = Invoke-VT-Filter -Inputs $inputs
+    $advice = Invoke-VT-Advisor -Classified $classified -Now $Now
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        Log-GovernanceEvent -Event @{ type='VIBRATIONAL_TRIAD_COMPLETE'; user_id=$UserId; total_inputs=$inputs.Count; high=$advice.HighResonance.Count; neutral=$advice.Neutral.Count; low=$advice.LowResonance.Count }
+    }
+    Write-Host "=== VIBRATIONAL TRIAD COMPLETE ===`n" -ForegroundColor Magenta
+    return @{ high_queue=$advice.HighResonance; neutral_queue=$advice.Neutral; low_queue=$advice.LowResonance; constitutional_queue=$advice.ConstitutionalTasks; metrics=$advice.Metrics; guidance=$advice.Guidance; signals=$advice.Signals }
+}
+
+Export-ModuleMember -Function Invoke-VibrationalTriad

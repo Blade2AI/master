@@ -1,0 +1,26 @@
+{
+  "status": "GREEN",
+  "mode": "LOCAL",
+  "containers": "SKIPPED (Local Mode)",
+  "tracks": {
+    "TRACK": "",
+    "EVIDENCE_TRACK": "stable",
+    "PROPERTY_TRACK": "insider"
+  },
+  "agent_runs": {
+    "evidence": "RC=0\n?? Evidence Validator Online | Mode: STABLE\n   Found 1 documents to process...\n   Processing: test_invoice_stable.txt...\n[EVIDENCE | STABLE] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Evidence\\Analysis\\_verified\\test_invoice_stable.json\n     ? Saved: C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Evidence\\Analysis\\_verified\\test_invoice_stable.json\n",
+    "property": "RC=0\n???  Property Analyst Online | Mode: INSIDER\n   Found 4 leads...\n   Analyzing: lead_01_standard.txt\n[PROPERTY | INSIDER] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Property\\Scored\\_drafts\\lead_01_standard.json\n   Analyzing: lead_02_fixer.txt\n[PROPERTY | INSIDER] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Property\\Scored\\_drafts\\lead_02_fixer.json\n   Analyzing: lead_03_ambiguous.txt\n[PROPERTY | INSIDER] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Property\\Scored\\_drafts\\lead_03_ambiguous.json\n   Analyzing: test_trap_fixer.txt\n[PROPERTY | INSIDER] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Property\\Scored\\_drafts\\test_trap_fixer.json\n"
+  },
+  "verification": {
+    "evidence_verified_path": "C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Evidence\\Analysis\\_verified\\test_invoice_stable.json",
+    "property_drafts_path": "C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Property\\Scored\\_drafts\\test_trap_fixer.json",
+    "evidence": "OK",
+    "property_legislation": "OK (score=5)"
+  },
+  "verified": true,
+  "ledger_audit": {
+    "ran": true,
+    "rc": 1,
+    "output": "\u26a1 Generating test traffic...\n[EVIDENCE | STABLE] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Evidence\\Analysis\\_verified\\smoke_test_1.json\n[EVIDENCE | STABLE] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Evidence\\Analysis\\_verified\\smoke_test_2.json\n[EVIDENCE | STABLE] Saved -> C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\Evidence\\Analysis\\_verified\\smoke_test_3.json\n   3 Events logged.\n\n\ud83d\udd0d Auditing Ledger Integrity...\nTraceback (most recent call last):\n  File \"C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\scripts\\verify_ledger.py\", line 62, in <module>\n    verify_chain_integrity()\n    ~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\andyj\\source\\repos\\PrecisePointway\\master\\scripts\\verify_ledger.py\", line 35, in verify_chain_integrity\n    if entry[\"prev_hash\"] != previous_hash:\n       ~~~~~^^^^^^^^^^^^^\nKeyError: 'prev_hash'"
+  }
+}

@@ -1,0 +1,103 @@
+﻿[CmdletBinding()]
+param(
+  [Parameter(Mandatory=$true)][string]$Prompt,
+  [string]$Endpoint = "http://localhost:11434",
+  [string]$RouterModel = "llama3",
+  [string]$VerifierModel = "llama3",
+  [int]$MaxTokens = 512,
+  [switch]$NoVerify,
+  [switch]$JsonOut
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Write-Info($m){ Write-Host "[INFO] $m" -ForegroundColor Cyan }
+function Write-Err ($m){ Write-Host "[FAIL] $m" -ForegroundColor Red }
+function New-Dir($p){ if (-not [string]::IsNullOrWhiteSpace($p)) { New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+
+# 0) Policy gate (fail-closed)
+try {
+  & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot/Validate-Policy.ps1" | Out-Null
+} catch { Write-Err "Policy validation failed: $($_.Exception.Message)"; exit 10 }
+
+# 1) Router → draft response
+$body = @{ model = $RouterModel; prompt = $Prompt; stream = $false; options = @{ num_predict = $MaxTokens } } | ConvertTo-Json -Depth 5
+Write-Info "Router: $RouterModel"
+try {
+  $resp = Invoke-RestMethod -Method Post -Uri ("{0}/api/generate" -f $Endpoint) -ContentType 'application/json' -Body $body -TimeoutSec 180
+} catch { Write-Err "Ollama router call failed: $($_.Exception.Message)"; exit 20 }
+$draft = [string]$resp.response
+
+# 2) Enforcer → trauma-standard sanitize (Python)
+$tmp = New-TemporaryFile
+Set-Content -LiteralPath $tmp -Value $draft -Encoding UTF8
+$py = @"
+import sys
+from agi.core.standards import TraumaStandard
+p = sys.argv[1]
+text = open(p, encoding='utf-8').read()
+ts = TraumaStandard()
+ok, v = ts.validate_output(text)
+if ok:
+    print(text)
+else:
+    print(ts.correct_output(text, v))
+"@
+$enforced = & python -c $py $tmp 2>$null
+Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+if (-not $enforced) { $enforced = $draft }
+
+$final = $enforced
+$verifyNote = "SKIPPED"
+
+# 3) Verifier → optional independent check/fix
+if (-not $NoVerify) {
+  $verifyPrompt = @"
+You are a safety verifier. Given USER PROMPT and ASSISTANT DRAFT below, reply with exactly one of:
+- OK
+- FIX: <safe, non-coercive, calm alternative>
+Policies: no coercive language; no urgency; no identity inference; calm tone; optional depth.
+USER PROMPT:
+$Prompt
+ASSISTANT DRAFT:
+$enforced
+"@
+  $vBody = @{ model = $VerifierModel; prompt = $verifyPrompt; stream = $false; options = @{ num_predict = 200 } } | ConvertTo-Json -Depth 5
+  try {
+    $vResp = Invoke-RestMethod -Method Post -Uri ("{0}/api/generate" -f $Endpoint) -ContentType 'application/json' -Body $vBody -TimeoutSec 120
+    $vText = [string]$vResp.response
+    if ($vText.Trim().ToUpper().StartsWith('OK')) {
+      $verifyNote = 'OK'
+    } elseif ($vText.Trim().ToUpper().StartsWith('FIX:')) {
+      $final = ($vText.Substring(4)).Trim()
+      $verifyNote = 'FIXED'
+    } else {
+      $verifyNote = 'UNRECOGNIZED_VERIFIER_OUTPUT'
+    }
+  } catch { $verifyNote = "VERIFIER_ERROR: $($_.Exception.Message)" }
+}
+
+# 4) Log and output
+$logRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'Data/ollama_runs'
+New-Dir $logRoot
+$stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+$logFile = Join-Path $logRoot ("run_" + $stamp + ".jsonl")
+$record = [pscustomobject]@{
+  ts = (Get-Date).ToString('o')
+  endpoint = $Endpoint
+  routerModel = $RouterModel
+  verifierModel = $VerifierModel
+  prompt = $Prompt
+  draft = $draft
+  enforced = $enforced
+  final = $final
+  verify = $verifyNote
+}
+($record | ConvertTo-Json -Compress -Depth 6) | Add-Content -LiteralPath $logFile
+
+if ($JsonOut) {
+  $record | ConvertTo-Json -Depth 6
+} else {
+  Write-Host $final
+}

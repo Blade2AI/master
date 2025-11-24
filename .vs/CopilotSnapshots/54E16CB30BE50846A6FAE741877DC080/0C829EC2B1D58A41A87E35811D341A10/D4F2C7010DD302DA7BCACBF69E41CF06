@@ -1,0 +1,105 @@
+﻿param(
+  [Parameter(Mandatory=$true)][string]$DeletionCsv,          # Path to Fleet_ColdStorage_Delete.csv
+  [string]$QuarantineDir = "$env:USERPROFILE\Documents\Sovereign\Quarantine", # Where rogue assets are relocated before final disposition
+  [string]$LogPath = "$env:USERPROFILE\Documents\Sovereign\Logs\ColdStorage_Actions.log", # Action log
+  [switch]$DryRun,                      # Report only, no changes
+  [switch]$SecureDelete,                # Overwrite file contents before deletion (if not quarantining)
+  [switch]$MoveThenDelete,              # Move to quarantine then delete original (default behaviour is move only)
+  [switch]$EncryptQuarantine,           # Encrypt quarantined files (ZIP AES) requires 7zip installed in PATH
+  [string]$EncryptionPassword = ""      # Password for encryption (if omitted with EncryptQuarantine -> plain move)
+)
+
+$ErrorActionPreference = 'Continue'
+
+function Ensure-Dir($p){ if(-not (Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+function NowStamp(){ (Get-Date).ToString('yyyy-MM-ddTHH:mm:ssZ') }
+function Hash-SHA256($path){ try { (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash } catch { '' } }
+function Log($msg){
+  $stamp = NowStamp()
+  $line = "$stamp`t$msg"
+  $line | Out-File -FilePath $LogPath -Append -Encoding UTF8
+  Write-Host $msg
+}
+function Secure-Wipe($path){
+  try {
+    $len = (Get-Item -LiteralPath $path -ErrorAction Stop).Length
+    # Overwrite with zeros then random
+    $fs = [System.IO.File]::Open($path,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Write,[System.IO.FileShare]::None)
+    $buffer = New-Object byte[](1048576)
+    [Array]::Fill($buffer, [byte]0)
+    $remaining = $len
+    while($remaining -gt 0){ $chunk = [Math]::Min($buffer.Length,$remaining); $fs.Write($buffer,0,$chunk); $remaining -= $chunk }
+    $fs.Flush(); $fs.Seek(0,[System.IO.SeekOrigin]::Begin) | Out-Null
+    (New-Object System.Random).NextBytes($buffer)
+    $remaining = $len
+    while($remaining -gt 0){ $chunk = [Math]::Min($buffer.Length,$remaining); $fs.Write($buffer,0,$chunk); $remaining -= $chunk }
+    $fs.Dispose()
+    Log "Secure wipe complete: $path"
+  } catch { Log "Secure wipe failed: $path :: $($_.Exception.Message)" }
+}
+
+Ensure-Dir (Split-Path $LogPath -Parent)
+Ensure-Dir $QuarantineDir
+
+if(-not (Test-Path $DeletionCsv)){ throw "Deletion CSV not found: $DeletionCsv" }
+
+# Import deletion list (flexible columns)
+$rows = Import-Csv -LiteralPath $DeletionCsv
+if(-not $rows -or $rows.Count -eq 0){ throw "Deletion CSV empty." }
+
+Log "Starting Cold Storage Execution (DryRun=$DryRun SecureDelete=$SecureDelete MoveThenDelete=$MoveThenDelete EncryptQuarantine=$EncryptQuarantine)"
+Log "Rows: $($rows.Count)"
+
+# Check for 7zip if encryption requested
+$sevenZip = $null
+if($EncryptQuarantine){ $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue; if(-not $sevenZip){ Log "7z not found – encryption disabled"; $EncryptQuarantine = $false } }
+
+foreach($r in $rows){
+  $rawPath = $r.Path
+  if(-not $rawPath){ continue }
+  $resolved = $rawPath
+  if(Test-Path $rawPath){ $resolved = (Resolve-Path $rawPath).Path }
+  $exist = Test-Path $resolved
+  $reason = if($r.PSObject.Properties['Reason']){ $r.Reason } else { 'Unspecified' }
+  $node = if($r.PSObject.Properties['Node']){ $r.Node } else { 'UNKNOWN' }
+
+  $hashBefore = if($exist){ Hash-SHA256 $resolved } else { '' }
+  Log "PROCESS Node=$node Reason=$reason Path=$resolved Exists=$exist HashBefore=$hashBefore"
+
+  if(-not $exist){ continue }
+
+  # Build quarantine target
+  $nodeDir = Join-Path $QuarantineDir $node
+  Ensure-Dir $nodeDir
+  $dest = Join-Path $nodeDir ([IO.Path]::GetFileName($resolved))
+
+  if($DryRun){ Log "DryRun: Would move $resolved -> $dest"; continue }
+
+  try {
+    Copy-Item -LiteralPath $resolved -Destination $dest -Force
+    Log "Copied to quarantine: $dest"
+  } catch { Log "Copy failed: $resolved :: $($_.Exception.Message)"; continue }
+
+  if($EncryptQuarantine -and $EncryptionPassword){
+    $zipPath = "$dest.enc.zip"
+    try {
+      # -p sets password (7z uses -pPASSWORD). Using maximum compression.
+      & $sevenZip.Source a -tzip $zipPath $dest -p$EncryptionPassword -mx=9 | Out-Null
+      if(Test-Path $zipPath){
+        Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+        Log "Encrypted quarantine artifact: $zipPath"
+        $dest = $zipPath
+      } else { Log "Encryption failed for $dest" }
+    } catch { Log "Encryption error for $dest :: $($_.Exception.Message)" }
+  }
+
+  if($MoveThenDelete){
+    if($SecureDelete){ Secure-Wipe $resolved }
+    try { Remove-Item -LiteralPath $resolved -Force -ErrorAction Stop; Log "Source deleted: $resolved" } catch { Log "Delete failed: $resolved :: $($_.Exception.Message)" }
+  }
+
+  $hashAfter = Hash-SHA256 $dest
+  Log "Quarantine Record Node=$node Stored=$dest HashAfter=$hashAfter"
+}
+
+Log "Cold Storage Execution complete."

@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\andyj\source\repos\PrecisePointway\master\src\verifier\VerifyEvidenceLib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\andyj\source\repos\PrecisePointway\master\src\verifier\VerifyEvidenceLib.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\andyj\source\repos\PrecisePointway\master\src\verifier\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{E2FE4321-11EF-3E32-906B-0444031537AC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{DFC9029C-056C-32A5-A84E-D3FCA9ED1BB7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

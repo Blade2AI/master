@@ -1,0 +1,107 @@
+﻿# README_SOVEREIGN_CRITICAL_HARVEST.md
+
+## Purpose
+The Sovereign Critical Harvest process consolidates essential personal, AI, and non-OEM application configuration data from fleet nodes onto a single target location (PC5 or an attached external drive). This enables rapid preservation, audit, or relocation under time pressure.
+
+## Modes
+1. DryRun (`-Mode DryRun`):
+   - Enumerates candidate files according to filters.
+   - Computes size totals per node and per category (personal, ai_data, apps).
+   - Writes `critical_size_estimate.json` and CSV report under `TARGET_ROOT/ MANIFESTS` (or console if target not yet created).
+   - No files are copied.
+2. Execute (`-Mode Execute`):
+   - Copies filtered files into structured folders:
+     - `USER_DATA/<node>/...`
+     - `AI_DATA/<node>/...`
+     - `APPS/<node>/...`
+   - Generates manifest files describing collected items and skipped/oversize entries.
+
+## Config
+Config file: `config/CriticalHarvestConfig.json`
+Key fields:
+- `target_root`: Destination base directory.
+- `nodes[]`: Each node has `name`, `root_paths[]`, `enabled`.
+- `include_extensions`: File extensions considered personal/critical.
+- `exclude_dirs`: Directory names ignored during traversal.
+- `identifier_patterns`: Strings that increase likelihood a file is personal/project-related.
+- `ai_markers`: Strings used to classify AI/editor data.
+- `oem_publishers`: Reserved for future Windows registry lookups; currently used to exclude OEM-labeled install paths if implemented.
+- `max_file_size_mb`: Skip individual files larger than this (record in skipped manifest).
+
+## Output Structure
+```
+TARGET_ROOT/
+  MANIFESTS/
+    critical_size_estimate.json
+    critical_size_estimate.csv
+    files_collected.json
+    files_collected.csv
+    apps_collected.json
+    apps_collected.csv
+    errors_and_skipped.json
+  USER_DATA/<node>/...
+  AI_DATA/<node>/...
+  APPS/<node>/...
+```
+
+## Manifest Schemas
+`files_collected.json` entries:
+```
+{
+  "node": "PC4",
+  "original_path": "C:/Users/andyj/Documents/report.pdf",
+  "dest_path": "E:/SOVEREIGN_CRITICAL/USER_DATA/PC4/Documents/report.pdf",
+  "size_bytes": 12345,
+  "category": "personal",
+  "source_area": "Documents",
+  "copied": true,
+  "hash_sha256": "<optional>"
+}
+```
+
+`critical_size_estimate.json` structure:
+```
+{
+  "generated_utc": "2025-11-23T10:04:12Z",
+  "total_bytes": 1234567890,
+  "totals_by_node": {"PC4": 1234, "PC5": 4567},
+  "totals_by_category": {"personal": 123, "ai_data": 456, "apps": 789},
+  "file_count": 420,
+  "max_file_size_mb": 10240
+}
+```
+
+`errors_and_skipped.json` entries:
+```
+{
+  "node": "PC4",
+  "path": "C:/Users/andyj/HugeVideo.mov",
+  "reason": "OversizeFile",
+  "size_bytes": 987654321
+}
+```
+
+## Changing Target Drive
+Edit `target_root` in `CriticalHarvestConfig.json` to point to a larger external drive (e.g. `F:/SOVEREIGN_CRITICAL`). Re-run DryRun to confirm available capacity. If satisfied, run Execute.
+
+## Integrity Considerations
+Manifests can be hashed and added to Sovereign verification harness by exporting their paths via environment flag or manual inclusion.
+
+## Idempotence
+Execute mode will skip copying when destination file already exists with matching size. Future enhancement: compare hashes.
+
+## Run Examples
+Dry run:
+```
+pwsh -File C:/BladeOps/scripts/RUN-CriticalHarvest.ps1 -Mode DryRun -ConfigPath config/CriticalHarvestConfig.json
+```
+Execute harvest:
+```
+pwsh -File C:/BladeOps/scripts/RUN-CriticalHarvest.ps1 -Mode Execute -ConfigPath config/CriticalHarvestConfig.json
+```
+
+## Next Enhancements
+- Hashing of collected files for integrity.
+- OEM publisher registry inspection to refine app capture.
+- Parallel copy with throttling.
+- Resume log for interrupted runs.

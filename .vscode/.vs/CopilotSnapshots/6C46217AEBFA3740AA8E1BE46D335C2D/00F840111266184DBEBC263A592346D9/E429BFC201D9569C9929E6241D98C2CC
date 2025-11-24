@@ -1,0 +1,203 @@
+﻿# Live Share 4-PC Development Setup Guide
+
+This guide sets up automated Visual Studio Live Share collaboration across your 4-PC development environment with C++14 support.
+
+## 🏗️ Architecture Overview
+
+- **Host PC (PC4)**: Runs the main development session and shares via Live Share
+- **Guest PCs (PC1-PC3)**: Join the Live Share session for collaborative development
+- **NAS Storage**: Central coordination point for session links and status
+- **Fleet Management**: Automated deployment and management via PowerShell
+
+## 📋 Prerequisites
+
+### All PCs
+1. **Visual Studio Code** installed
+2. **Live Share Extension** (will be auto-installed by scripts)
+3. **Git** installed and configured
+4. **PowerShell 5.1+** 
+5. **Network access** to NAS at `\\dxp4800plus-67ba\ops`
+6. **C++ Build Tools** for Visual Studio (for C++14 compilation)
+
+### Host PC Only
+7. **Repository clone** at designated location
+8. **Elevated PowerShell access** for initial setup
+
+## 🚀 Quick Start
+
+### 1. Deploy Fleet Configuration
+
+On the **Host PC**, run:
+```powershell
+# Deploy Live Share setup to all PCs
+.\scripts\Deploy-LiveShare-Fleet.ps1 -InstallLiveShare -SetupTasks
+```
+
+### 2. Start Host Session
+
+**Option A: VS Code Task**
+1. Open VS Code in your workspace
+2. `Ctrl+Shift+P` → "Tasks: Run Task"
+3. Select "LiveShare: Start Host Session"
+
+**Option B: PowerShell**
+```powershell
+.\scripts\Start-LiveShare-Host.ps1 -AutoNotify
+```
+
+### 3. Join from Guest PCs
+
+**Option A: VS Code Task**
+1. Open VS Code 
+2. `Ctrl+Shift+P` → "Tasks: Run Task"
+3. Select "LiveShare: Join Session"
+
+**Option B: Desktop Shortcut**
+- Double-click "Join Live Share" shortcut on desktop
+
+**Option C: PowerShell**
+```powershell
+C:\ops\LiveShare\Join-LiveShare-Guest.ps1 -AutoOpen
+```
+
+## 🛠️ Available VS Code Tasks
+
+| Task Name | Description |
+|-----------|-------------|
+| **LiveShare: Start Host Session** | Start hosting a Live Share session |
+| **LiveShare: Join Session** | Join an active Live Share session |
+| **LiveShare: Quick Join (Read from NAS)** | One-click join using NAS link |
+| **LiveShare: Check Session Status** | View current session information |
+| **Build: C++ Debug** | Build project in Debug mode with C++14 |
+| **Build: C++ Release** | Build project in Release mode with C++14 |
+| **Collab: Start (Pull + Open + Live Share)** | Legacy workflow integration |
+| **Collab: End (Commit + Push)** | Commit and push changes |
+| **Fleet: Bootstrap All PCs** | Deploy fleet automation |
+
+## 📁 File Structure
+
+```
+PrecisePointway/master/
+├── .vscode/
+│   ├── tasks.json              # VS Code tasks (enhanced)
+│   ├── master master.sln       # Visual Studio solution
+│   └── master master.vcxproj   # Project file
+├── scripts/
+│   ├── Start-LiveShare-Host.ps1    # Host session starter
+│   ├── Join-LiveShare-Guest.ps1    # Guest session joiner
+│   ├── Deploy-LiveShare-Fleet.ps1  # Fleet deployment
+│   ├── Start-Collab.ps1           # Legacy collab start
+│   ├── End-Collab.ps1             # Legacy collab end
+│   └── FleetBootstrap.ps1          # Fleet automation
+└── docs/
+    └── LiveShare-Setup.md          # This guide
+```
+
+## 🔧 Configuration Files
+
+### NAS Coordination Files
+- `\\dxp4800plus-67ba\ops\LiveShareLink.txt` - Current session link
+- `\\dxp4800plus-67ba\ops\LiveShareStatus.json` - Session status and metadata
+
+### Local Logs
+- `%USERPROFILE%\LiveShareLogs\` - Session logs for troubleshooting
+
+## 🎯 Workflow Examples
+
+### Typical Development Session
+
+1. **Host starts session:**
+   ```powershell
+   # Host PC (PC4)
+   .\scripts\Start-LiveShare-Host.ps1
+   ```
+
+2. **Guests join automatically:**
+   ```powershell
+   # Guest PCs (PC1-PC3) - run simultaneously
+   C:\ops\LiveShare\Join-LiveShare-Guest.ps1 -AutoOpen
+   ```
+
+3. **Collaborative development:**
+   - Shared editing in VS Code
+   - Shared terminal access
+   - Shared debugging sessions
+   - C++14 builds work across all PCs
+
+4. **End session:**
+   - Host: `Ctrl+C` in PowerShell or close VS Code
+   - Guests: Sessions automatically end
+
+### Build and Test Workflow
+
+```powershell
+# Run on any connected PC via VS Code tasks
+# Debug build with C++14
+Ctrl+Shift+P → "Tasks: Run Task" → "Build: C++ Debug"
+
+# Release build
+Ctrl+Shift+P → "Tasks: Run Task" → "Build: C++ Release"
+```
+
+## 🔍 Monitoring and Troubleshooting
+
+### Check Session Status
+```powershell
+# From any PC
+.\scripts\Show-LiveShareStatus.ps1 -Continuous
+```
+
+### View Logs
+```powershell
+# Host logs
+Get-Content "$env:USERPROFILE\LiveShareLogs\LiveShare_Host_*.log" -Tail 20
+
+# Guest logs  
+Get-Content "$env:USERPROFILE\LiveShareLogs\LiveShare_Guest_*.log" -Tail 20
+```
+
+### Common Issues
+
+**Issue: "Cannot access NAS"**
+- Solution: Check network connectivity and permissions to `\\dxp4800plus-67ba\ops`
+
+**Issue: "Live Share extension not found"**
+- Solution: Install manually: `code --install-extension ms-vsliveshare.vsliveshare`
+
+**Issue: "No session link found"**
+- Solution: Ensure host has successfully started a session and check status file
+
+**Issue: "C++ build fails"**
+- Solution: Verify C++ Build Tools are installed and C++14 standard is configured
+
+## 🚀 Advanced Features
+
+### Automated Notifications
+Configure Slack/Teams webhooks in the host script:
+```powershell
+.\scripts\Start-LiveShare-Host.ps1 -AutoNotify -SlackWebhook "https://hooks.slack.com/..."
+```
+
+### Fleet Management Integration
+Use existing fleet management for coordinated deployments:
+```powershell
+.\scripts\FleetBootstrap.ps1 -RunNow
+```
+
+### Custom Build Configurations
+Modify tasks.json to add custom build targets with different C++ standards or platforms.
+
+## 📞 Support
+
+- **Logs**: Check `%USERPROFILE%\LiveShareLogs\` for detailed session logs
+- **Status**: Use "LiveShare: Check Session Status" VS Code task
+- **Fleet Status**: Run `Show-LiveShareStatus.ps1` for real-time monitoring
+
+## 🔄 Updates and Maintenance
+
+To update the Live Share configuration across all PCs:
+```powershell
+.\scripts\Deploy-LiveShare-Fleet.ps1 -InstallLiveShare -SetupTasks
+```
+
+This will redeploy scripts and configurations to all fleet machines.

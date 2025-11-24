@@ -1,0 +1,61 @@
+﻿param(
+  [ValidateSet('Full','Light')][string]$Mode = 'Light',
+  [string]$Role = 'Unknown'
+)
+$ErrorActionPreference = 'Stop'
+
+$Base = 'C:\Sovereign'
+$Log  = "$Base\logs\integrity-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
+function Log($m){"$((Get-Date).ToString('s'))`t$env:COMPUTERNAME`t$Role`t$m" | Out-File -FilePath $Log -Append -Encoding utf8; Write-Host $m }
+function Get-StringHash($String, $HashName='SHA256'){
+  $bytes=[System.Text.Encoding]::UTF8.GetBytes($String)
+  $algo=[System.Security.Cryptography.HashAlgorithm]::Create($HashName)
+  $algo.ComputeHash($bytes) | ForEach-Object ToString x2 | ForEach-Object {$_.ToLower()} -join ''
+}
+Log "=== INTEGRITY CHECK START ($Mode) ==="
+
+$CriticalPaths=@(
+  "$Base\scripts",
+  "$Base\policy",
+  "$Base\ledger\immutable",
+  "$Base\state"
+) | Where-Object { Test-Path $_ }
+
+$CurrentHash = foreach($p in $CriticalPaths){ Get-ChildItem -Recurse -File -Path $p | Get-FileHash -Algorithm SHA256 -ErrorAction SilentlyContinue }
+$CurrentMerkleRoot = ($CurrentHash.Hash | Sort-Object) -join '' | Get-StringHash SHA256
+Log "Current Merkle root: $CurrentMerkleRoot"
+
+$lastGoodFile = "$Base\state\last_known_good_root.txt"
+$anchorFile   = "$Base\state\last_anchor.json"
+
+if($Mode -eq 'Light'){
+  if(Test-Path $lastGoodFile){
+    $expected=(Get-Content $lastGoodFile -Raw).Trim()
+    if($CurrentMerkleRoot -eq $expected){ Log 'Light check PASSED'; Log "=== INTEGRITY CHECK END ($Mode) ==="; return } else { Log 'Light check FAILED - escalating to Full' }
+  } else { Log 'No last good root - escalating to Full' }
+}
+
+Log 'Entering Full verification'
+$verified=$false
+if(Test-Path $anchorFile){
+  try {
+    $anchor=Get-Content $anchorFile -Raw | ConvertFrom-Json
+    $txid=$anchor.txid; Log "Fetching anchor tx: $txid"
+    $resp=Invoke-WebRequest -Uri "https://arweave.net/tx/$txid" -TimeoutSec 30 -UseBasicParsing
+    $json=$resp.Content | ConvertFrom-Json
+    $data64=$json.data -replace '-','+' -replace '_','/'
+    $pad=(4 - $data64.Length % 4) % 4; $data64 += '=' * $pad
+    $bytes=[Convert]::FromBase64String($data64)
+    $anchoredRoot=[System.Text.Encoding]::UTF8.GetString($bytes).Trim()
+    if($anchoredRoot -eq $CurrentMerkleRoot){ Log 'Anchor VERIFIED'; $verified=$true } else { Log "Anchor MISMATCH anchored=$anchoredRoot current=$CurrentMerkleRoot" }
+  } catch { Log "Anchor fetch failed: $($_.Exception.Message)" }
+} else { Log 'No anchor file - local verify only' }
+
+if(-not $verified -and (Test-Path $lastGoodFile)){
+  $expected=(Get-Content $lastGoodFile -Raw).Trim()
+  if($CurrentMerkleRoot -eq $expected){ Log 'Local fallback PASSED'; $verified=$true } else { Log 'Local fallback FAILED' }
+}
+
+if($verified){ $CurrentMerkleRoot | Set-Content $lastGoodFile -Encoding utf8; Log 'Updated last known good root' } else { Log 'Integrity check FAILED - recommend Safe Mode audit' }
+Log "=== INTEGRITY CHECK END ($Mode) ==="

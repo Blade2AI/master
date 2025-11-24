@@ -1,0 +1,212 @@
+# Blade Audit Configuration
+# ?? "Thy word is a lamp unto my feet, and a light unto my path." (Psalm 119:105 KJV)
+# ?? "In a world you can be anything – be nice."
+
+audit_configuration:
+  version: "BLADE-v1.0"
+  biblical_foundation: "Moreover it is required in stewards, that a man be found faithful. (1 Corinthians 4:2 KJV)"
+  collaborative_motto: "In a world you can be anything – be nice."
+
+# Primary audit roots - adjust paths for your environment
+audit_roots:
+  - "C:\\Users\\{USERNAME}\\Documents"
+  - "C:\\Users\\{USERNAME}\\Desktop" 
+  - "C:\\Users\\{USERNAME}\\Downloads"
+  - "C:\\source"
+  - "D:\\source"
+  - "C:\\PrecisePointway"
+  - "D:\\PrecisePointway"
+  - "C:\\Truthios"
+  - "D:\\Truthios"
+  - "C:\\Blade2_Ark"
+  - "D:\\Blade2_Ark"
+
+# Cloud synchronization paths
+cloud_paths:
+  google_drive:
+    - "C:\\Users\\{USERNAME}\\Google Drive"
+    - "G:\\My Drive"
+    - "G:\\"
+    - "H:\\Google Drive"
+  
+  onedrive:
+    - "C:\\Users\\{USERNAME}\\OneDrive"
+    - "C:\\Users\\{USERNAME}\\OneDrive - Personal"
+    - "C:\\Users\\{USERNAME}\\OneDrive - Business"
+  
+  icloud:
+    - "C:\\Users\\{USERNAME}\\iCloudDrive"
+    - "C:\\Users\\{USERNAME}\\iCloud Drive"
+  
+  dropbox:
+    - "C:\\Users\\{USERNAME}\\Dropbox"
+    - "D:\\Dropbox"
+
+# NAS and network storage paths
+nas_paths:
+  - "\\\\dxp4800plus-67ba\\ops"
+  - "\\\\192.168.4.43\\Truthios"
+  - "\\\\192.168.4.43\\Blade"
+  - "\\\\nas\\shared"
+
+# Project bucket patterns for categorization
+project_buckets:
+  TruthIOS:
+    - "TruthIOS"
+    - "truthios"
+    - "LightOS"
+    - "ios-truth"
+  
+  TruthHub:
+    - "TruthHub"
+    - "truth-hub"
+    - "truth_hub"
+  
+  VIPFish:
+    - "VIP"
+    - "fish"
+    - "vip-fish"
+    - "vipfish"
+  
+  Blade2Ark:
+    - "Blade2"
+    - "ark"
+    - "blade-ark"
+    - "Blade2_Ark"
+  
+  LMStudio:
+    - "LM_Studio"
+    - "lm-studio"
+    - "lmstudio"
+    - "LMStudio"
+  
+  Ollama:
+    - "ollama"
+    - "Ollama"
+    - "OLLAMA"
+  
+  VisualStudio:
+    - "Visual Studio"
+    - "vs"
+    - "visualstudio"
+    - "VisualStudio"
+  
+  VSCode:
+    - "vscode"
+    - "VS Code"
+    - ".vscode"
+    - "VSCode"
+  
+  PrecisePointway:
+    - "PrecisePointway"
+    - "precisepointway"
+    - "Precise_Pointway"
+  
+  ProjectSunflower:
+    - "Sunflower"
+    - "sunflower"
+    - "Project-Sunflower"
+  
+  CovenantPack:
+    - "Covenant"
+    - "covenant"
+    - "Trial-Covenant"
+    - "Gameplay-Pack"
+
+  ChatGPT:
+    - "ChatGPT"
+    - "chatgpt"
+    - "openai"
+    - "conversations"
+  
+  iMessage:
+    - "Messages"
+    - "iMessage"
+    - "chat.db"
+    - "Attachments"
+  
+  WhatsApp:
+    - "WhatsApp"
+    - "whatsapp"
+    - "WhatsApp Chat"
+  
+  Gmail:
+    - "Gmail"
+    - "gmail"
+    - "Takeout"
+    - "mbox"
+
+# File and directory exclusions
+exclusions:
+  # Temporary files
+  - "*.tmp"
+  - "*.bak"
+  - "*.log"
+  - "*.cache"
+  - "thumbs.db"
+  - "desktop.ini"
+  - ".DS_Store"
+  
+  # Build artifacts
+  - "node_modules"
+  - "bin"
+  - "obj"
+  - "Debug"
+  - "Release"
+  - "packages"
+  - "target"
+  - "build"
+  
+  # Version control
+  - ".git\\objects"
+  - ".git\\logs"
+  - ".svn"
+  - ".hg"
+  
+  # IDE files
+  - ".vs"
+  - ".vscode\\extensions"
+  - ".idea"
+  - "*.suo"
+  - "*.user"
+  
+  # System files
+  - "System Volume Information"
+  - "$RECYCLE.BIN"
+  - "Windows"
+  - "Program Files"
+  - "Program Files (x86)"
+
+# Timeline gap analysis settings
+timeline_gap_days:
+  default_expected_activity: 7    # Days without files before flagging
+  warning_threshold: 14           # Yellow warning level
+  critical_threshold: 30          # Red critical level
+
+# File hashing configuration
+hash_settings:
+  large_file_threshold_mb: 100    # Files larger than this use chunk hashing
+  chunk_size_mb: 10               # Size of chunks to hash for large files
+  use_full_hash_for_large_files: false  # Set true for complete hash of large files
+
+# Export directories for manual chat/email exports
+export_directories:
+  chatgpt: "Exports\\ChatGPT"
+  imessage: "Exports\\iMessage"
+  whatsapp: "Exports\\WhatsApp"
+  gmail: "Exports\\Gmail"
+  slack: "Exports\\Slack"
+
+# Network discovery settings
+network_discovery:
+  scan_local_subnet: true
+  include_network_shares: true
+  test_nas_connectivity: true
+
+# Output configuration
+output_settings:
+  generate_csv: true
+  generate_json: true
+  include_full_paths: true
+  hash_manifest_separate: true
+  timeline_charts: false

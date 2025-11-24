@@ -1,0 +1,23 @@
+from executor.tasks import REGISTRY
+from core.governance import Proposal
+
+class Executor:
+    def run_trial(self, proposal: Proposal):
+        task_func = REGISTRY.get(proposal.payload.get("task_name"))
+        if not task_func:
+            return {"success": False, "error": "Unknown Task"}
+        try:
+            metrics = task_func(proposal.payload.get("params", {}))
+            return metrics
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+# Service loop heartbeat
+if __name__ == "__main__":
+    import time
+    from core.config import CONFIG
+    print(f"\U0001F9EA SOVEREIGN EXECUTOR ONLINE | Track: {CONFIG.TRACK}")
+    executor = Executor()
+    while True:
+        # Placeholder: poll queue / tasks
+        time.sleep(10)

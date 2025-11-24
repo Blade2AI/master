@@ -1,0 +1,70 @@
+version: 1
+standard: SOV-SIF-Standard
+description: >
+  Safety / Serious Incident Framework.
+  Every SIF entry is evidence-first, machine-parseable, and regulator-ready.
+
+fields:
+  id: "SIF-<YEAR>-<SEQUENCE>"
+  classification:
+    - "NearMiss"
+    - "MedicalTreatment"
+    - "LostTimeInjury"
+    - "Fatality"
+    - "QualityCritical"
+    - "ProcessSafety"
+  severity:
+    scale: 1-5
+    description:
+      1: "Minor – no injury, no equipment damage"
+      3: "Serious – medical treatment, significant damage"
+      5: "Catastrophic – fatality or system-threatening event"
+  location:
+    site: "string"
+    line: "string"
+    station: "string"
+  worker_context:
+    neurodivergent_flag: "bool"
+    auditory_sensitivity: "bool"
+    trauma_protocol_engaged: "bool"
+  timestamps:
+    occurred_at: "RFC3339"
+    detected_at: "RFC3339"
+    contained_at: "RFC3339"
+    closed_at: "RFC3339|null"
+  detection_source:
+    - "WorkerReport"
+    - "QSB"
+    - "Sensor"
+    - "External"
+  linked_assets:
+    nodes:
+      - "NodeID"
+    projects:
+      - "ProjectID"
+    SIF_parent: "SIF-ID|null"
+  investigation:
+    method:
+      - "8D"
+      - "DMAIC"
+      - "RCA-5Whys"
+    root_cause:
+      text: "string"
+      verified: "bool"
+      truth_judge_rating: "0-10"
+  actions:
+    interim:
+      - "ActionID"
+    permanent:
+      - "ActionID"
+  status:
+    - "Open"
+    - "UnderInvestigation"
+    - "ClosedVerified"
+    - "ClosedUnverified"
+  evidence:
+    audit_log_refs:
+      - "HARDLOG-offset"
+    attachments:
+      - "path/to/file"
+  retention_years: 10

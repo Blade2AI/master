@@ -1,0 +1,642 @@
+﻿# ═══════════════════════════════════════════════════════════════════════════
+# CODEX SOVEREIGN - CONSTITUTIONAL AI GOVERNANCE STACK
+# Complete Windows PowerShell Implementation
+# Single-File Deployment Script
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# VERSION: 1.0.0-digital-dominion
+# PARENT SEAL: @Blade040125
+# PLATFORM: Windows + PowerShell 5.1+ + Tailscale (optional)
+#
+# USAGE:
+#   1. Copy this entire file to C:\BladeOps\sovereign.ps1
+#   2. Open PowerShell as Administrator (if creating directories)
+#   3. cd C:\BladeOps
+#   4. .\sovereign.ps1 -Action setup    (first time only)
+#   5. .\sovereign.ps1 -Action security (daily security check)
+#   6. .\sovereign.ps1 -Action full     (complete governance stack)
+#
+# ACTIONS:
+#   setup      - Initial installation (creates directories, generates keys)
+#   security   - Layer 0 only (security scan + attestation)
+#   transport  - Layer 0 + 0.5 (security + transport)
+#   audit      - Layer 0 + 1 + 2 (security + IP audit + fleet audit)
+#   governance - Full stack (all layers)
+#   full       - Alias for governance
+#   verify     - Check system state
+#
+# ═══════════════════════════════════════════════════════════════════════════
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("setup", "security", "transport", "audit", "governance", "full", "verify", "compliance", "truthtest", "workerimpact")]
+    [string]$Action = "verify",
+    
+    [switch]$SkipTransport,
+    [switch]$AutoApprove,
+    [switch]$Verbose,
+
+    # Additional parameters for extended actions
+    [string]$MetricCategory,
+    [datetime]$StartDate,
+    [datetime]$EndDate,
+
+    [string]$WorkerID,
+    [string]$Station
+)
+
+$ErrorActionPreference = "Stop"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GLOBAL CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+$Global:Config = @{
+    Version = "1.0.0-digital-dominion"
+    ParentSeal = "@Blade040125"
+    
+    BasePath = "C:\BladeOps"
+    SecurityPath = "C:\BladeOps\Security"
+    TransportPath = "C:\BladeOps\Transport"
+    IPAuditPath = "C:\BladeOps\IPAudit"
+    FleetAuditPath = "C:\BladeOps\FleetAudit"
+    GovernancePath = "C:\BladeOps\Boardroom13"
+    LogPath = "C:\BladeOps\Logs"
+    
+    PrivateKeyPath = "C:\BladeOps\Security\private_key.xml"
+    PublicKeyPath = "C:\BladeOps\Security\public_key.xml"
+    NodeRegistry = "C:\BladeOps\Security\node_registry.json"
+    SecurityLog = "C:\BladeOps\Security\security_events.jsonl"
+    TransportLog = "C:\BladeOps\Transport\transport_events.jsonl"
+    GovernanceLog = "C:\BladeOps\Logs\governance.log"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DISPLAY FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Write-SovereignBanner {
+    $banner = @"
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║   ███████╗ ██████╗ ██╗   ██╗███████╗██████╗ ███████╗██╗ ██████╗ ███╗   ██║
+║   ██╔════╝██╔═══██╗██║   ██║██╔════╝██╔══██╗██╔════╝██║██╔════╝ ████╗  ██║
+║   ███████╗██║   ██║██║   ██║█████╗  ██████╔╝█████╗  ██║██║  ███╗██╔██╗ ██║
+║   ╚════██║██║   ██║╚██╗ ██╔╝██╔══╝  ██╔══██╗██╔══╝  ██║██║   ██║██║╚██╗██║
+║   ███████║╚██████╔╝ ╚████╔╝ ███████╗██║  ██║███████╗██║╚██████╔╝██║ ╚████║
+║   ╚══════╝ ╚═════╝   ╚═══╝  ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+║                                                                           ║
+║              CODEX SOVEREIGN CONSTITUTIONAL GOVERNANCE STACK             ║
+║                         v$($Global:Config.Version)                            ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+"@
+    Write-Host $banner -ForegroundColor Cyan
+}
+
+function Write-LayerHeader {
+    param([string]$Layer, [string]$Description)
+    Write-Host "`n┌───────────────────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
+    Write-Host "│ $Layer" -ForegroundColor Yellow
+    Write-Host "│ $Description" -ForegroundColor Gray
+    Write-Host "└───────────────────────────────────────────────────────────────────────────┘`n" -ForegroundColor Yellow
+}
+
+function Write-StepSuccess { param([string]$Message); Write-Host "  ✅ $Message" -ForegroundColor Green }
+function Write-StepError { param([string]$Message); Write-Host "  ❌ $Message" -ForegroundColor Red }
+function Write-StepWarning { param([string]$Message); Write-Host "  ⚠️  $Message" -ForegroundColor Yellow }
+function Write-StepInfo { param([string]$Message); Write-Host "  ℹ️  $Message" -ForegroundColor Cyan }
+
+function Is-Interactive {
+    try {
+        # Accessing RawUI will throw in non-interactive hosts
+        $null = $Host.UI.RawUI
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Confirm-Action {
+    param([string]$Message)
+    if ($AutoApprove) { return $true }
+    if (-not (Is-Interactive)) {
+        Write-StepWarning "Non-interactive host detected — continuing without prompt for: $Message"
+        return $true
+    }
+    $response = Read-Host "$Message (yes/no)"
+    return $response -eq "yes"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LOGGING FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Log-Event {
+    param(
+        [hashtable]$Event,
+        [string]$LogFile = $Global:Config.GovernanceLog
+    )
+    
+    $Event.timestamp = Get-Date -Format "o"
+    $Event.node = $env:COMPUTERNAME
+    $Event.ParentSeal = $Global:Config.ParentSeal
+    
+    # Ensure log directory exists
+    $logDir = Split-Path $LogFile
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+    
+    # Log as JSONL
+    $Event | ConvertTo-Json -Compress | Out-File $LogFile -Append -Encoding UTF8
+}
+
+function Log-GovernanceEvent {
+    param([hashtable]$Event)
+    
+    $logEntry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $($Event.type): $($Event.message)"
+    
+    # Ensure log directory exists
+    $logDir = Split-Path $Global:Config.GovernanceLog
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+    
+    Add-Content $Global:Config.GovernanceLog $logEntry
+    
+    if ($Verbose) {
+        Write-StepInfo "Logged: $($Event.type)"
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 0: SECURITY & NODE CONTROL - CRYPTOGRAPHY
+# ═══════════════════════════════════════════════════════════════════════════
+
+function New-NodeIdentity {
+    Write-Host "`n🔐 Generating node identity (RSA-4096)..." -ForegroundColor Yellow
+    
+    if ((Test-Path $Global:Config.PrivateKeyPath) -and (Test-Path $Global:Config.PublicKeyPath)) {
+        Write-StepWarning "Identity already exists"
+        if (-not (Confirm-Action "Overwrite existing identity?")) {
+            Write-StepInfo "Keeping existing identity"
+            return
+        }
+    }
+    
+    $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider(4096)
+    $privateKey = $rsa.ToXmlString($true)
+    $publicKey = $rsa.ToXmlString($false)
+    
+    Ensure-Dir (Split-Path $Global:Config.PrivateKeyPath)
+    $privateKey | Out-File $Global:Config.PrivateKeyPath -Encoding UTF8
+    $publicKey | Out-File $Global:Config.PublicKeyPath -Encoding UTF8
+    
+    # Secure private key
+    Write-Host "  🔒 Securing private key..." -ForegroundColor Gray
+    try {
+        $acl = Get-Acl $Global:Config.PrivateKeyPath
+        $acl.SetAccessRuleProtection($true, $false)
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $env:USERNAME, "FullControl", "Allow"
+        )
+        $acl.SetAccessRule($rule)
+        Set-Acl $Global:Config.PrivateKeyPath $acl
+    } catch {
+        Write-StepWarning "Failed to set ACLs on private key: $_"
+    }
+    
+    Write-StepSuccess "Node identity created"
+    Write-Host "  📄 Public key: $($Global:Config.PublicKeyPath)" -ForegroundColor Gray
+    Write-Host "  🔐 Private key: $($Global:Config.PrivateKeyPath) (secured)" -ForegroundColor Gray
+    
+    $hash = Get-FileHash $Global:Config.PublicKeyPath -Algorithm SHA256
+    Write-Host "  🔑 Fingerprint: $($hash.Hash.Substring(0, 16))..." -ForegroundColor Gray
+    
+    Log-Event @{
+        type = "IDENTITY_CREATED"
+        fingerprint = $hash.Hash
+    } -LogFile $Global:Config.SecurityLog
+}
+
+function Get-NodeIdentity {
+    if (-not (Test-Path $Global:Config.PublicKeyPath)) {
+        throw "Node identity not found. Run with -Action setup first."
+    }
+    
+    $publicKey = Get-Content $Global:Config.PublicKeyPath -Raw
+    $hash = Get-FileHash $Global:Config.PublicKeyPath -Algorithm SHA256
+    
+    return @{
+        Node = $env:COMPUTERNAME
+        PublicKey = $publicKey
+        Fingerprint = $hash.Hash
+    }
+}
+
+function New-MessageSignature {
+    param([Parameter(Mandatory=$true)]$Data)
+    
+    if (-not (Test-Path $Global:Config.PrivateKeyPath)) {
+        throw "Private key not found. Run with -Action setup first."
+    }
+    
+    $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+    $rsa.FromXmlString((Get-Content $Global:Config.PrivateKeyPath -Raw))
+    
+    $dataString = if ($Data -is [hashtable]) { $Data | ConvertTo-Json -Compress } else { $Data.ToString() }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($dataString)
+    
+    $signatureBytes = $rsa.SignData($bytes, [System.Security.Cryptography.HashAlgorithmName]::SHA256, 
+        [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+    
+    return @{
+        signature = [Convert]::ToBase64String($signatureBytes)
+        algorithm = "RSA-SHA256"
+        timestamp = Get-Date -Format "o"
+        node = $env:COMPUTERNAME
+        ParentSeal = $Global:Config.ParentSeal
+    }
+}
+
+function Test-MessageSignature {
+    param(
+        [Parameter(Mandatory=$true)]$Data,
+        [Parameter(Mandatory=$true)][hashtable]$Signature,
+        [Parameter(Mandatory=$true)][string]$PublicKey
+    )
+    
+    try {
+        $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+        $rsa.FromXmlString($PublicKey)
+        
+        $dataString = if ($Data -is [hashtable]) { $Data | ConvertTo-Json -Compress } else { $Data.ToString() }
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($dataString)
+        $signatureBytes = [Convert]::FromBase64String($Signature.signature)
+        
+        return $rsa.VerifyData($bytes, $signatureBytes, [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+            [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+    } catch {
+        Write-Warning "Signature verification failed: $_"
+        return $false
+    }
+}
+
+# Import extension modules (stubs / helpers) if present; ignore if not
+try {
+    $modBase = Join-Path $PSScriptRoot 'scripts'
+    $paths = @(
+        Join-Path $modBase 'Core-Sovereign-Data.psm1',
+        Join-Path $modBase 'Truth-Test.psm1',
+        Join-Path $modBase 'Worker-Impact-Dashboard.psm1',
+        Join-Path $modBase 'Worker-Impact-Helpers.psm1'
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            Import-Module $p -Force -ErrorAction SilentlyContinue
+        }
+    }
+} catch {
+    Write-StepWarning "Failed to import extension modules: $_"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 0.5: TRANSPORT - PEER NODE COMMUNICATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Test-Tailscale {
+    Write-Host "`n🌐 Testing Tailscale connection to peer nodes..." -ForegroundColor Yellow
+    
+    $tailscalePath = "C:\Program Files\Tailscale IPN Agent\tailscale.exe"
+    if (-not (Test-Path $tailscalePath)) {
+        Write-StepError "Tailscale not installed. Visit tailscale.com/download to install."
+        return $false
+    }
+    
+    $nodes = @()
+    try {
+        $nodesJson = & $tailscalePath status --json
+        $nodes = $nodesJson | ConvertFrom-Json
+    } catch {
+        Write-StepError "Failed to retrieve Tailscale status: $_"
+        return $false
+    }
+    
+    if ($nodes.Count -eq 0) {
+        Write-StepWarning "No peers found. Ensure Tailscale is connected."
+        return $false
+    }
+    
+    Write-Host "  🟢 Connected peers:" -ForegroundColor Green
+    foreach ($node in $nodes) {
+        if ($node.Online) {
+            Write-Host "    - $($node.Hostname) ($($node.TailscaleIPs))" -ForegroundColor Green
+        } else {
+            Write-Host "    - $($node.Hostname) (OFFLINE)" -ForegroundColor Red
+        }
+    }
+    
+    return $true
+}
+
+function New-PersistentConnection {
+    param(
+        [Parameter(Mandatory=$true)][string]$TargetNode,
+        [Parameter(Mandatory=$false)][int]$RetryCount = 5
+    )
+    
+    Write-Host "`n🔗 Establishing persistent connection to $TargetNode..." -ForegroundColor Yellow
+    
+    $tailscalePath = "C:\Program Files\Tailscale IPN Agent\tailscale.exe"
+    if (-not (Test-Path $tailscalePath)) {
+        Write-StepError "Tailscale not installed. Visit tailscale.com/download to install."
+        return $false
+    }
+    
+    # Attempt to bring up the connection
+    $success = $false
+    for ($i = 0; $i -lt $RetryCount; $i++) {
+        try {
+            & $tailscalePath up --advertise-exit-node --accept-routes --authkey=$Using:AuthKey --hostname=$env:COMPUTERNAME
+            $success = $true
+            Write-StepSuccess "Connection established"
+            break
+        } catch {
+            Write-StepWarning "Attempt $($i+1) failed: $_"
+            Start-Sleep -Seconds 2
+        }
+    }
+    
+    if (-not $success) {
+        Write-StepError "Failed to establish connection after $RetryCount attempts."
+        return $false
+    }
+    
+    # Ensure the connection is active
+    try {
+        $status = & $tailscalePath status
+        if ($status -match "connected") {
+            Write-Host "  ✅ Connection active" -ForegroundColor Green
+        } else {
+            Write-StepWarning "Connection status: $status"
+        }
+    } catch {
+        Write-StepError "Failed to check connection status: $_"
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYERS 1 & 2: AUDITING - IP & FLEET AUDIT
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-IpAudit {
+    Write-LayerHeader "IP AUDIT" "Identify and report unauthorized IP addresses"
+    
+    $exfilThreat = Test-Path "C:\BladeOps\Security\exfiltration_indicator.xml"
+    if ($exfilThreat) {
+        Write-StepWarning "Potential exfiltration indicator found! Investigate immediately."
+    }
+    
+    $publicIp = (Invoke-WebRequest -Uri "http://ipinfo.io/ip" -UseBasicP)
+    Write-Host "  Public IP: $publicIp" -ForegroundColor Cyan
+    
+    # Basic check against known bad IPs (example list)
+    $badIps = @("192.0.2.1", "203.0.113.5")
+    if ($badIps -contains $publicIp) {
+        Write-StepError "Public IP $publicIp is blacklisted! Immediate action required."
+    } else {
+        Write-StepSuccess "Public IP $publicIp is clean."
+    }
+}
+
+function Invoke-FleetAudit {
+    Write-LayerHeader "FLEET AUDIT" "Check node connectivity and health"
+    
+    $nodes = @("node1.example.com", "node2.example.com")
+    foreach ($node in $nodes) {
+        try {
+            $status = Test-Connection -ComputerName $node -Count 2 -ErrorAction Stop
+            Write-Host "  ✔ $node: Replied in $($status.ResponseTime)ms" -ForegroundColor Green
+        } catch {
+            Write-StepWarning "  ⚠️ $node: $_"
+        }
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAYER 3: GOVERNANCE - CONSTITUTIONAL ENFORCEMENT
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Test-ConstitutionalCompliance {
+    Write-LayerHeader "CONSTITUTIONAL COMPLIANCE" "Ensure node adherence to constitutional norms"
+    
+    $complianceStatus = @{
+        "NodeID" = $env:COMPUTERNAME
+        "Timestamp" = (Get-Date).ToString("o")
+        "PoliciesPassed" = @()
+        "PoliciesFailed" = @()
+    }
+    
+    # Sample policy check: Ensure no high-risk software is installed
+    $highRiskApps = @("powersploit", "nanocore")
+    foreach ($app in $highRiskApps) {
+        $isInstalled = Get-WmiObject -Query "SELECT * FROM Win32_Product WHERE Name = '$app'" -ErrorAction SilentlyContinue
+        if ($isInstalled) {
+            $complianceStatus.PoliciesFailed += "High-risk application installed: $app"
+        } else {
+            $complianceStatus.PoliciesPassed += "No high-risk applications found."
+        }
+    }
+    
+    # Output compliance report
+    $reportPath = Join-Path $Global:Config.BasePath "ComplianceReports\$($env:COMPUTERNAME)_compliance_report_$(Get-Date -Format 'yyyyMMddHHmmss').json"
+    $complianceStatus | ConvertTo-Json -Depth 4 | Out-File -FilePath $reportPath -Encoding UTF8
+    Write-StepSuccess "Compliance report generated: $reportPath"
+}
+
+function Invoke-GovernanceAction {
+    Write-LayerHeader "GOVERNANCE ACTION" "Execute constitutional enforcement actions"
+    
+    # Placeholder for potential future actions
+    Write-StepInfo "No governance actions defined"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMPLIANCE REPORTING - EVIDENCE GENERATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+function Invoke-ComplianceAction {
+    Write-LayerHeader "COMPLIANCE REPORT" "Generate constitutional compliance evidence package"
+    try {
+        $outputDir = Join-Path $Global:Config.BasePath "Compliance\Reports"
+        if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir -Force | Out-Null }
+
+        # Prefer module if provided
+        $modulePath = Join-Path $PSScriptRoot "Compliance-Report-Generator.psm1"
+        if (Test-Path $modulePath) {
+            Write-StepInfo "Found compliance module: $modulePath"
+            Import-Module $modulePath -Force
+            if (Get-Command -Name New-ComplianceReport -ErrorAction SilentlyContinue) {
+                $report = New-ComplianceReport -OutputPath $outputDir
+                Write-StepSuccess "Compliance report generated by module"
+                Write-StepInfo "Location: $outputDir"
+                Log-GovernanceEvent @{ type = 'COMPLIANCE_REPORT'; message = 'Compliance report generated (module)'; report_id = $report.ReportID } 
+                return
+            } else {
+                Write-StepWarning "Module loaded but New-ComplianceReport not exported"
+            }
+        }
+
+        # Fallback: use any existing script helpers
+        $scriptFallback = Join-Path $PSScriptRoot "generate_evidence_pack.ps1"
+        if (Test-Path $scriptFallback) {
+            Write-StepInfo "Running fallback evidence pack generator: $scriptFallback"
+            & $scriptFallback -Force -Verbose:$false 2>$null
+            Write-StepSuccess "Evidence pack generated (fallback)"
+            Write-StepInfo "Location: $outputDir"
+            Log-GovernanceEvent @{ type = 'COMPLIANCE_REPORT'; message = 'Compliance report generated (fallback script)'; status = 'generated' }
+            return
+        }
+
+        # Minimal internal report if no helper available
+        $reportObj = [pscustomobject]@{
+            report_id = [guid]::NewGuid().Guid
+            node = $env:COMPUTERNAME
+            parent_seal = $Global:Config.ParentSeal
+            generated = (Get-Date).ToString('o')
+            identity = (Get-NodeIdentity)
+            checks = @(
+                @{ name = 'node_identity'; status = (Test-Path $Global:Config.PublicKeyPath) },
+                @{ name = 'security_log'; status = (Test-Path $Global:Config.SecurityLog) }
+            )
+        }
+        $outFile = Join-Path $outputDir ("compliance_report_{0}.json" -f ((Get-Date).ToString('yyyyMMdd_HHmmss')))
+        $reportObj | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $outFile -Encoding UTF8
+        Write-StepSuccess "Minimal compliance report written"
+        Write-StepInfo "Location: $outFile"
+        Log-GovernanceEvent @{ type = 'COMPLIANCE_REPORT'; message = 'Minimal compliance report generated'; report_id = $reportObj.report_id }
+    } catch {
+        Write-StepError "Compliance action failed: $_"
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ACTION DISPATCHER
+# ═══════════════════════════════════════════════════════════════════════════
+
+switch ($Action) {
+    'setup' {
+        Ensure-Dir $Global:Config.BasePath
+        Ensure-Dir $Global:Config.SecurityPath
+        Ensure-Dir $Global:Config.TransportPath
+        Ensure-Dir $Global:Config.IPAuditPath
+        Ensure-Dir $Global:Config.FleetAuditPath
+        Ensure-Dir $Global:Config.GovernancePath
+        Ensure-Dir $Global:Config.LogPath
+        
+        Write-Host "Setup completed. Run the script again with -Action security"
+        return
+    }
+    'security' {
+        Write-Host "`n🛡️  Running security scan & attestation..." -ForegroundColor Yellow
+        New-NodeIdentity
+        Test-Tailscale
+        Invoke-IpAudit
+        Invoke-FleetAudit
+    }
+    'transport' {
+        if ($SkipTransport) {
+            Write-StepWarning "Skipping transport layer as requested"
+        } else {
+            Write-Host "`n📡  Testing transport layer (Tailscale)...`n" -ForegroundColor Yellow
+            Test-Tailscale
+        }
+    }
+    'audit' {
+        Invoke-IpAudit
+        Invoke-FleetAudit
+    }
+    'governance' {
+        Test-ConstitutionalCompliance
+        Invoke-GovernanceAction
+    }
+    'full' {
+        # Alias for governance
+        $Action = "governance"
+    }
+    'verify' {
+        Write-Host "`n🔍 Verifying system state..." -ForegroundColor Yellow
+        if (Test-Path $Global:Config.PublicKeyPath) {
+            Write-StepSuccess "Node identity: OK"
+        } else {
+            Write-StepError "Node identity not found!"
+        }
+        
+        if (Test-Path $Global:Config.SecurityLog) {
+            Write-StepSuccess "Security log: OK"
+        } else {
+            Write-StepWarning "Security log not found."
+        }
+    }
+    'compliance' {
+        Invoke-ComplianceAction
+        return
+    }
+
+    'truthtest' {
+        Write-LayerHeader "TRUTH TEST" "Watermelon metric detection and constitutional escalation"
+
+        if (-not $MetricCategory) { $MetricCategory = "Financial" }
+        if (-not $StartDate)      { $StartDate = (Get-Date).AddMonths(-3) }
+        if (-not $EndDate)        { $EndDate   = Get-Date }
+
+        if (Get-Command -Name Invoke-TruthTest -ErrorAction SilentlyContinue) {
+            try {
+                $report = Invoke-TruthTest -MetricCategory $MetricCategory -StartDate $StartDate -EndDate $EndDate
+                Write-Host "Truth Test Status: $($report.Status)" -ForegroundColor White
+                Write-Host "Constitutional Action: $($report.ConstitutionalAction)" -ForegroundColor White
+            } catch {
+                Write-StepError "Invoke-TruthTest failed: $_"
+            }
+        } else {
+            Write-StepError "Invoke-TruthTest not available. Ensure Truth-Test.psm1 is present."
+        }
+    }
+
+    'workerimpact' {
+        Write-LayerHeader "WORKER IMPACT" "Real-time impact visibility for a single worker"
+
+        if (-not $WorkerID) {
+            Write-StepError "WorkerID is required for -Action workerimpact"
+            break
+        }
+
+        if (Get-Command -Name Show-WorkerImpactDashboard -ErrorAction SilentlyContinue) {
+            try {
+                Show-WorkerImpactDashboard -WorkerID $WorkerID -Station $Station
+            } catch {
+                Write-StepError "Show-WorkerImpactDashboard failed: $_"
+            }
+        } else {
+            Write-StepError "Show-WorkerImpactDashboard not available. Ensure Worker-Impact-Dashboard.psm1 is present."
+        }
+    }
+    'compliance' {
+        Invoke-ComplianceAction
+        return
+    }
+    default {
+        Write-StepInfo "Unknown action: $Action"
+        return
+    }
+}
+
+Write-Host "`n💼  CODEX SOVEREIGN - OPERATION COMPLETE" -ForegroundColor Cyan
+Write-Host "  Next steps:" -ForegroundColor Gray
+Write-Host "    - Review logs in $($Global:Config.LogPath)" -ForegroundColor Gray
+Write-Host "    - Schedule daily security checks with Task Scheduler" -ForegroundColor Gray
+Write-Host "    - Ensure Tailscale is set to start on boot (if using)" -ForegroundColor Gray

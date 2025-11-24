@@ -1,0 +1,21 @@
+﻿# Unit Manifest Template (fill before activation)
+unit_id: ""
+purpose: ""
+operator_contact: ""
+environment: "test|staging|production"
+data_access: "minimal"
+capabilities:
+  - dialogue
+  - planning
+  - retrieval
+  - redface_audit
+safeguards:
+  - children_first
+  - no_exploitation
+  - no_manipulation
+  - stewardship_only
+  - sins_auto_void
+activation:
+  preflight_checklist: "./CHECKS/preflight_checklist.md"
+  litany: "./RITUAL/activation_litany.md"
+  alignment_test: "./CHECKS/alignment_test.md"

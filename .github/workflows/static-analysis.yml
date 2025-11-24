@@ -1,0 +1,35 @@
+name: static-analysis
+on:
+  push:
+    paths:
+      - 'src/verifier/**'
+      - 'scripts/run-static-analysis.sh'
+      - '.cppcheck'
+      - '.github/workflows/static-analysis.yml'
+  pull_request:
+    paths:
+      - 'src/verifier/**'
+      - 'scripts/run-static-analysis.sh'
+      - '.cppcheck'
+jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: Run static analysis
+        run: bash scripts/run-static-analysis.sh
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cppcheck-report
+          path: build/cppcheck_report.xml
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cppcheck-summary
+          path: build/cppcheck_summary.txt

@@ -1,0 +1,21 @@
+﻿from core.governance import Proposal, ActionType
+
+class Scout:
+    def propose_cleanup(self):
+        return Proposal(
+            action_type=ActionType.TEST_TRIAL,
+            description="Cleanup old logs to save space",
+            target_system="LogServer",
+            estimated_cost=0.05,
+            payload={"task_name": "log_cleanup", "params": {"days": 30}}
+        )
+
+# Service loop heartbeat
+if __name__ == "__main__":
+    import time
+    from core.config import CONFIG
+    print(f"\U0001F52D SOVEREIGN SCOUT ONLINE | Track: {CONFIG.TRACK}")
+    scout = Scout()
+    while True:
+        # Placeholder: scan property leads
+        time.sleep(15)

@@ -1,0 +1,16 @@
+{
+  "name": "blade-boardroom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "echo Build step placeholder"
+  },
+  "dependencies": {
+    "electron": "^28.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

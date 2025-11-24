@@ -1,0 +1,21 @@
+# Metrics rotation & aggregation configuration
+# Paths
+logs_root: "C:\BladeOps\data\metrics\raw"          # Directory where the active raw metrics file lives
+raw_file: "success_rate.log"                           # Active metrics file name inside logs_root
+summary_dir: "C:\BladeOps\data\metrics\summary"     # Where summaries (CSV/DB) are written
+manifest_path: "C:\BladeOps\data\metrics\metrics_manifest.json" # Integrity manifest path
+
+# Rotation
+max_file_size_mb: 2
+rotate_interval: daily      # hourly | daily | weekly
+max_days: 7                  # rotate if active file is older than this many days (safety)
+
+# Retention
+raw_retention_days: 30       # raw files older than this are gzip'd or deleted
+compress_old_raw: true       # gzip older raw files instead of deleting
+
+# Aggregation
+aggregation_interval: daily  # hourly | daily | weekly
+max_total_size_mb: 20
+alert_if_success_rate_below: 0.95
+# Future fields: p95_latency_threshold_ms, p99_latency_threshold_ms

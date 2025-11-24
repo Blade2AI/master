@@ -1,0 +1,453 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{A9672ABC-E03B-FF16-403C-65C5710E5C2E}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40contrast\fn-inspect\src\addon.cc" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40newrelic\native-metrics\src\GCBinder.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40newrelic\native-metrics\src\LoopChecker.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40newrelic\native-metrics\src\native_metrics.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40tootallnate\quickjs-emscripten\c\interface.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\bufferutil\src\bufferutil.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\adler32.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\argon2.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\bcrypt.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\blake2b.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\blake2s.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\blake3.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\crc32.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\md4.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\md5.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\ripemd160.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\scrypt.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\sha1.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\sha256.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\sha3.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\sha512.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\sm3.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\whirlpool.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\xxhash128.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\xxhash3.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\xxhash32.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\xxhash64.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\utf-8-validate\src\validation.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\jkjustjoshing.vscode-text-pastry-1.3.1\node_modules\uuid\benchmark\benchmark-native.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\linux_and_mac\attach.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\attach.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\inject_dll.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\run_code_on_dllmain.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\stdafx.cpp" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\_pydevd_bundle\pydevd_cython.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\_pydevd_frame_eval\pydevd_frame_evaluator.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\_pydevd_sys_monitoring\_pydevd_sys_monitoring_cython.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\node_modules\node-addon-api\nothing.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\audio.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\buffer.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\common.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\control_generic.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\equalizer.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\genre.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\getlopt.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\httpget.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\legacy_module.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\compat.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\dct64.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\dct64_altivec.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\dct64_i386.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\dct64_i486.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\dither.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\equalizer.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\feature.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\format.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\frame.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\icy.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\icy2utf8.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\id3.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\index.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\layer1.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\layer2.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\layer3.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\lfs_alias.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\lfs_wrap.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\libmpg123.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\ntom.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\optimize.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\parse.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\readers.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\stringbuf.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_8bit.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_altivec.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_i486.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_real.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_s32.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\tabinit.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\testcpu.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\local.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\metaprint.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\module.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\mpg123.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\aix.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\alib.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\alsa.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\arts.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\coreaudio.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\dummy.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\esd.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\hp.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\jack.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\mint.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\nas.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\openal.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\os2.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\oss.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\portaudio.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\pulse.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\sdl.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\sgi.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\sndio.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\sun.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\win32.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\win32_wasapi.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\playlist.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\resolver.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\sfifo.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\streamdump.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\term.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\wav.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\win32_net.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\win32_support.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\xfermem.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\test.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\test_output.c" />
+    <ClCompile Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\src\binding.c" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\Protocol53Security.cpp" />
+    <ClCompile Include="src\SystemTest.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40newrelic\native-metrics\src\GCBinder.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40newrelic\native-metrics\src\LoopChecker.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\%40newrelic\native-metrics\src\Metric.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\hash-wasm\src\hash-wasm.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_callbacks.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_callbacks_12_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_callbacks_pre_12_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_converters.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_converters_43_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_converters_pre_43_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_define_own_property_helper.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_implementation_12_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_implementation_pre_12_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_json.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_maybe_43_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_maybe_pre_43_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_new.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_object_wrap.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_persistent_12_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_persistent_pre_12_inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_private.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_scriptorigin.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_string_bytes.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_typedarray_contents.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\nan\nan_weak.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\python.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_custom_pyeval_settrace.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_custom_pyeval_settrace_310.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_custom_pyeval_settrace_311.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_custom_pyeval_settrace_common.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_settrace.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_utils.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\py_version.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\common\ref_utils.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\attach.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\py_win_helpers.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\run_code_in_memory.hpp" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\stdafx.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\pydevd_attach_to_process\windows\targetver.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-python.debugpy-2025.10.0-win32-x64\bundled\libs\debugpy\_vendored\pydevd\_pydevd_frame_eval\release_mem.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\node_modules\node-addon-api\napi-inl.deprecated.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\node_modules\node-addon-api\napi-inl.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\node_modules\node-addon-api\napi.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\freebsd\x64\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\freebsd\x64\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\linux\arm\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\linux\arm\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\linux\ia32\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\linux\ia32\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\linux\x64\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\linux\x64\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\mac\ia32\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\mac\ia32\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\mac\x64\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\mac\x64\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\solaris\ia32\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\solaris\ia32\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\solaris\x64\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\solaris\x64\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\win\ia32\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\win\ia32\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\win\x64\config.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\config\win\x64\mpg123.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\audio.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\buffer.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\common.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\genre.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\getlopt.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\httpget.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\compat.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\debug.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\decode.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\dither.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\frame.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\gapless.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\getbits.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\getcpuflags.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\huffman.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\icy.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\icy2utf8.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\id3.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\index.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\intsym.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\l12_integer_tables.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\l2tables.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\l3_integer_tables.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\mangle.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\mpeghead.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\mpg123lib_intern.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\optimize.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\parse.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\reader.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\sample.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synths.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_8bit.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_mono.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_ntom.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\synth_sse3d.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\libmpg123\true.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\local.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\metaprint.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\module.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\mpg123app.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\output\output.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\playlist.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\resolver.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\sfifo.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\streamdump.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\term.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\wavhead.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\win32_support.h" />
+    <ClInclude Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\speaker\node_modules\speaker\deps\mpg123\src\xfermem.h" />
+    <ClInclude Include="include\KJVScriptureFoundation.h" />
+    <ClInclude Include="include\Protocol53Security.h" />
+    <ClInclude Include="include\SpiritualProtection.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\..\..\.vscode\extensions\alefragnani.bookmarks-13.5.0\vscode-whats-new\ui\whats-new.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\alefragnani.project-manager-12.8.0\vscode-whats-new\ui\whats-new.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\ast-types\node_modules\tslib\tslib.es6.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\ast-types\node_modules\tslib\tslib.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\async-mutex\node_modules\tslib\tslib.es6.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\async-mutex\node_modules\tslib\tslib.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\bignumber.js\doc\API.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\eol\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\errorhandler\public\error.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\jsbn\example.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\lil-uuid\test\runner.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\lz-string\tests\SpecRunner.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\recast\node_modules\tslib\tslib.es6.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\recast\node_modules\tslib\tslib.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\sprintf-js\demo\angular.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\terser\tools\props.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\tslib\tslib.es6.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\dist\node_modules\tslib\tslib.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\editor.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\codestream.codestream-16.1.1\sidebar.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\commitDetails.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\composer.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\graph.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\home.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\patchDetails.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\rebase.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\settings.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\eamodio.gitlens-17.4.1\dist\webviews\timeline.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\github.copilot-1.364.0\dist\node_modules\%40vscode\codicons\dist\codicon.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\karigari.chat-0.35.0\static\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-azuretools.vscode-azureresourcegroups-0.11.1\NOTICE.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-azuretools.vscode-containers-2.1.0\NOTICE.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\assets\stt\speechmodel.en-us.cpu.9.0.54436607\itn\itn.bin" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\assets\stt\speechmodel.en-us.cpu.9.0.54436607\prongen\tn1033.bin" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\assets\tts\aria\am_v5_decoder.bin" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\assets\tts\aria\am_v5_encoder.bin" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vscode.vscode-speech-0.16.0-win32-x64\assets\tts\aria\device_vocoder_v6_streaming.bin" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-1.0.5959\webview\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-audio-0.1.93\node_modules\has-symbol-support-x\badges.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-audio-0.1.93\node_modules\has-symbol-support-x\tests\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-audio-0.1.93\node_modules\has-to-string-tag-x\badges.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-audio-0.1.93\node_modules\synctasks\test.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-vsliveshare.vsliveshare-audio-0.1.93\out\calling\externalapp\dist\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-windows-ai-studio.windows-ai-studio-0.18.3-win32-x64\model-lab-ui\build\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\ms-windows-ai-studio.windows-ai-studio-0.18.3-win32-x64\webview-ui\build\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\peterschmalfeldt.explorer-exclude-1.3.2\extension\resources\welcome.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\pnp.polacode-0.3.4\webview\index.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\redvanworkshop.explorer-exclude-vscode-extension-1.2.2\resources\welcome.html" />
+    <None Include="..\..\..\..\..\.vscode\extensions\tomoki1207.pdf-1.2.2\lib\web\viewer.html" />
+    <None Include="apps\elite-chat\src\email.cfg.toml" />
+    <None Include="docs\Behavioral-OS-Integration.md" />
+    <None Include="docs\BigCodex-Integration.md" />
+    <None Include="docs\LiveShare-Setup.md" />
+    <None Include="payload\vscode\settings.json" />
+    <None Include="PrecisePointway.sln" />
+    <None Include="PrecisePointway.vcxproj" />
+    <None Include="README.md" />
+    <None Include="scripts\Advanced-Fleet-Analytics-Dashboard.ps1" />
+    <None Include="scripts\BigCodex-FactCard.ps1" />
+    <None Include="scripts\Cross-Platform-OS-Foundation.ps1" />
+    <None Include="scripts\Deploy-LiveShare-Fleet-Production.ps1" />
+    <None Include="scripts\Deploy-LiveShare-Fleet.ps1" />
+    <None Include="scripts\Elite-Search.ps1" />
+    <None Include="scripts\Execute-PrecisePointway-Search.ps1" />
+    <None Include="scripts\fleet-profile.ps1" />
+    <None Include="scripts\Global-Impact-Assessment.ps1" />
+    <None Include="scripts\Join-LiveShare-Guest.ps1" />
+    <None Include="scripts\Network-Utils.ps1" />
+    <None Include="scripts\Optimize-Fleet-Mistral.ps1" />
+    <None Include="scripts\Plain-Sight-Gameplay-Pack.ps1" />
+    <None Include="scripts\Protocol-5-3-SecurityLock.ps1" />
+    <None Include="scripts\Scripture-Codex-Mesh.ps1" />
+    <None Include="scripts\Spiritual-Protection-Protocol.ps1" />
+    <None Include="scripts\Start-BehavioralOS-Host.ps1" />
+    <None Include="scripts\Start-LiveShare-Host-Production.ps1" />
+    <None Include="scripts\Start-LiveShare-Host.ps1" />
+    <None Include="scripts\Test-LiveShare-Fleet-Optimization.ps1" />
+    <None Include="scripts\Test-LiveShare-Optimization.ps1" />
+    <None Include="scripts\Trial-Covenant-Pack-Preparation.ps1" />
+    <None Include="SETUP-COMPLETE.md" />
+    <None Include="setup-liveshare.bat" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="payload\fleet\pc-list.txt" />
+    <Text Include="prompts\mistral-fleet-optimization-prompt.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

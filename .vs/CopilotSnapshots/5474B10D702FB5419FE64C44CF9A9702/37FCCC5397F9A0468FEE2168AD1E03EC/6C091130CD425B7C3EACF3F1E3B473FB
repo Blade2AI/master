@@ -1,0 +1,197 @@
+﻿param(
+  [string]$QueueRoot = "\\dxp4800plus-67ba\ops\Queue",
+  [string]$PackageRoot = "\\dxp4800plus-67ba\ops\Packages",
+  [string]$LocalWorkDir = "C:\\ops",
+  [int]$IntervalSec = 30,
+  [string]$OllamaEndpoint = "http://localhost:11434",
+  [string]$DefaultModel = "llama3.2:3b"
+)
+
+# Simple JSONL logger
+$LogDir = Join-Path $LocalWorkDir 'logs'
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$LogPath = Join-Path $LogDir 'pull_agent.jsonl'
+function Write-Log {
+  param([string]$Level='Info',[string]$Message,[hashtable]$Data)
+  $evt = [ordered]@{ ts=(Get-Date).ToString('o'); host=$env:COMPUTERNAME; level=$Level; msg=$Message; data=$Data }
+  Add-Content -Path $LogPath -Value (($evt | ConvertTo-Json -Depth 8 -Compress))
+}
+
+# Ollama Integration Functions
+function Test-OllamaAvailable {
+  try {
+    $response = Invoke-RestMethod -Uri "$OllamaEndpoint/api/tags" -Method GET -TimeoutSec 5 -ErrorAction Stop
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Invoke-OllamaAnalysis {
+  param([string]$Text, [string]$Context = "command", [string]$Model = $DefaultModel)
+  
+  if (-not (Test-OllamaAvailable)) {
+    Write-Log -Level 'Warn' -Message 'Ollama unavailable for analysis' -Data @{ text=$Text.Substring(0,[Math]::Min(100,$Text.Length)) }
+    return $null
+  }
+
+  $prompts = @{
+    "command" = "Analyze this command for security risks, intent, and provide a brief assessment:"
+    "deploy" = "Analyze this deployment package for potential risks and summarize contents:"
+    "script" = "Analyze this script execution for security implications and purpose:"
+    "error" = "Analyze this error and suggest potential solutions or causes:"
+  }
+
+  $prompt = "$($prompts[$Context]) $Text"
+  
+  try {
+    $body = @{
+      model = $Model
+      prompt = $prompt
+      stream = $false
+      options = @{
+        temperature = 0.1
+        num_predict = 200
+      }
+    } | ConvertTo-Json
+
+    $response = Invoke-RestMethod -Uri "$OllamaEndpoint/api/generate" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 30
+    return $response.response
+  } catch {
+    Write-Log -Level 'Warn' -Message 'Ollama analysis failed' -Data @{ error="$_"; context=$Context }
+    return $null
+  }
+}
+
+function Handle-OllamaCommand($cmd) {
+  $prompt = $cmd.prompt
+  $model = if ($cmd.model) { $cmd.model } else { $DefaultModel }
+  
+  if (-not (Test-OllamaAvailable)) { 
+    throw "Ollama service not available at $OllamaEndpoint" 
+  }
+
+  try {
+    $body = @{
+      model = $model
+      prompt = $prompt
+      stream = $false
+    } | ConvertTo-Json
+
+    $response = Invoke-RestMethod -Uri "$OllamaEndpoint/api/generate" -Method POST -Body $body -ContentType "application/json" -TimeoutSec 60
+    
+    # Save response to file if specified
+    if ($cmd.output) {
+      $outputPath = Join-Path $LocalWorkDir $cmd.output
+      New-Item -ItemType Directory -Force -Path (Split-Path $outputPath) | Out-Null
+      $response.response | Out-File -FilePath $outputPath -Encoding UTF8
+      Write-Log -Message 'Ollama response saved' -Data @{ model=$model; output=$outputPath; prompt_length=$prompt.Length }
+    } else {
+      Write-Log -Message 'Ollama response generated' -Data @{ model=$model; response_length=$response.response.Length; prompt_length=$prompt.Length }
+    }
+    
+  } catch {
+    Write-Log -Level 'Error' -Message 'Ollama command failed' -Data @{ error="$_"; model=$model; prompt_length=$prompt.Length }
+    throw
+  }
+}
+
+$HostKey = $env:COMPUTERNAME.ToLower()
+$MyQueue = Join-Path $QueueRoot $HostKey
+New-Item -ItemType Directory -Force -Path $MyQueue | Out-Null
+New-Item -ItemType Directory -Force -Path $LocalWorkDir | Out-Null
+
+Write-Log -Message 'Agent start' -Data @{ queue=$MyQueue; packages=$PackageRoot; ollama_available=(Test-OllamaAvailable) }
+
+function Handle-Deploy($cmd) {
+  # AI Analysis of deployment
+  $analysis = Invoke-OllamaAnalysis -Text "Deploying package: $($cmd.package) to destination: $($cmd.dest)" -Context "deploy"
+  if ($analysis) {
+    Write-Log -Message 'Deploy analysis' -Data @{ package=$cmd.package; ai_assessment=$analysis }
+  }
+
+  # Allow both simple (package name) and absolute package paths
+  $pkgPath = if ($cmd.package -and (Test-Path $cmd.package)) { $cmd.package } else { Join-Path $PackageRoot $cmd.package }
+  if (-not (Test-Path $pkgPath)) { throw "Package not found: $($cmd.package) [$pkgPath]" }
+  $dest = if ($cmd.dest) { $cmd.dest } else { $LocalWorkDir }
+  New-Item -ItemType Directory -Force -Path $dest | Out-Null
+  $rc = Start-Process -FilePath robocopy -ArgumentList @("$pkgPath","$dest","/MIR","/R:2","/W:2","/NFL","/NDL","/NP") -PassThru -WindowStyle Hidden -Wait
+  Write-Log -Message 'Deploy done' -Data @{ package=$cmd.package; dest=$dest; exit=$rc.ExitCode; ai_analysis=$analysis }
+  
+  # Optional bootstrap extras
+  if ($cmd.RegisterTasks) {
+    schtasks /Create /TN "SelfHeal Automation" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\ops\SelfHealAutomation.ps1" /F | Out-Null
+    schtasks /Create /TN "Fleet Pull Agent" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\ops\FleetPullAgent.ps1" /F | Out-Null
+    schtasks /Create /TN "Ship Logs Nightly" /SC DAILY /ST 02:10 /RU SYSTEM /RL HIGHEST /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\ops\Ship-Logs.ps1" /F | Out-Null
+    Write-Log -Message 'Tasks (SelfHeal, Pull, ShipLogs) registered' -Data @{ dest=$dest }
+  }
+  if ($cmd.RunNow) {
+    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\ops\SelfHealAutomation.ps1' -WindowStyle Hidden | Out-Null
+    Write-Log -Message 'SelfHealAutomation started (RunNow)'
+  }
+}
+
+function Handle-Run($cmd) {
+  # AI Analysis of script execution
+  $analysis = Invoke-OllamaAnalysis -Text "Executing script: $($cmd.script) with args: $($cmd.args -join ' ')" -Context "script"
+  if ($analysis) {
+    Write-Log -Message 'Script analysis' -Data @{ script=$cmd.script; ai_assessment=$analysis }
+  }
+
+  $script = $cmd.script
+  if (-not (Test-Path $script)) { throw "Script not found: $script" }
+  $args = @()
+  if ($cmd.args) { $args = @($cmd.args) }
+  $p = Start-Process -FilePath powershell -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$script") + $args) -WindowStyle Hidden -PassThru -Wait
+  Write-Log -Message 'Run done' -Data @{ script=$script; exit=$p.ExitCode; ai_analysis=$analysis }
+}
+
+function Handle-Sync($cmd) {
+  $src = $cmd.source; $dest = $cmd.dest
+  if (-not $src -or -not $dest) { throw 'sync requires source and dest' }
+  New-Item -ItemType Directory -Force -Path $dest | Out-Null
+  $rc = Start-Process -FilePath robocopy -ArgumentList @("$src","$dest","/MIR","/R:2","/W:2","/NFL","/NDL","/NP") -PassThru -WindowStyle Hidden -Wait
+  Write-Log -Message 'Sync done' -Data @{ source=$src; dest=$dest; exit=$rc.ExitCode }
+}
+
+function Handle-Ps($cmd) {
+  # AI Analysis of PowerShell command
+  $analysis = Invoke-OllamaAnalysis -Text "PowerShell command: $($cmd.code)" -Context "command"
+  if ($analysis) {
+    Write-Log -Message 'PowerShell analysis' -Data @{ code=$cmd.code.Substring(0,[Math]::Min(100,$cmd.code.Length)); ai_assessment=$analysis }
+  }
+
+  $code = $cmd.code
+  if (-not $code) { throw 'ps command requires a code property' }
+  $p = Start-Process -FilePath powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command',$code) -WindowStyle Hidden -PassThru -Wait
+  Write-Log -Message 'PS inline done' -Data @{ exit=$p.ExitCode; code=$code.Substring(0,[Math]::Min(100,$code.Length)); ai_analysis=$analysis }
+}
+
+# Main execution loop
+while ($true) {
+  try {
+    $files = Get-ChildItem -Path $MyQueue -Filter 'command_*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime
+    foreach ($f in $files) {
+      $cmd = Get-Content $f.FullName -Encoding UTF8 | ConvertFrom-Json
+      Write-Log -Message 'Command received' -Data $cmd
+      
+      switch ($cmd.type) {
+        'deploy'  { Handle-Deploy $cmd }
+        'run'     { Handle-Run $cmd }
+        'sync'    { Handle-Sync $cmd }
+        'ps'      { Handle-Ps $cmd }
+        'ollama'  { Handle-OllamaCommand $cmd }
+        Default   { throw "Unknown command type: $($cmd.type)" }
+      }
+      
+      $done = [System.IO.Path]::ChangeExtension($f.FullName, '.done.json')
+      Move-Item -Path $f.FullName -Destination $done -Force
+      Write-Log -Message 'Command processed' -Data @{ done=$done }
+    }
+  } catch {
+    # AI Analysis of errors
+    $errorAnalysis = Invoke-OllamaAnalysis -Text "Error in FleetPullAgent: $_" -Context "error"
+    Write-Log -Level 'Error' -Message 'Agent loop error' -Data @{ error = "$_"; ai_analysis=$errorAnalysis }
+  }
+  Start-Sleep -Seconds $IntervalSec
+}

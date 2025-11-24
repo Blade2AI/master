@@ -1,0 +1,79 @@
+﻿param(
+  [string]$QueueRoot = "\\dxp4800plus-67ba\ops\Queue",
+  [string]$PackageRoot = "\\dxp4800plus-67ba\ops\Packages",
+  [string]$LocalWorkDir = "C:\\ops",
+  [int]$IntervalSec = 30
+)
+
+# Simple JSONL logger
+$LogDir = Join-Path $LocalWorkDir 'logs'
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$LogPath = Join-Path $LogDir 'pull_agent.jsonl'
+function Write-Log {
+  param([string]$Level='Info',[string]$Message,[hashtable]$Data)
+  $evt = [ordered]@{ ts=(Get-Date).ToString('o'); host=$env:COMPUTERNAME; level=$Level; msg=$Message; data=$Data }
+  Add-Content -Path $LogPath -Value (($evt | ConvertTo-Json -Depth 8 -Compress))
+}
+
+$HostKey = $env:COMPUTERNAME.ToLower()
+$MyQueue = Join-Path $QueueRoot $HostKey
+New-Item -ItemType Directory -Force -Path $MyQueue | Out-Null
+New-Item -ItemType Directory -Force -Path $LocalWorkDir | Out-Null
+
+Write-Log -Message 'Agent start' -Data @{ queue=$MyQueue; packages=$PackageRoot }
+
+function Handle-Deploy($cmd) {
+  $pkgPath = Join-Path $PackageRoot $cmd.package
+  if (-not (Test-Path $pkgPath)) { throw "Package not found: $($cmd.package)" }
+  $dest = if ($cmd.dest) { $cmd.dest } else { $LocalWorkDir }
+  New-Item -ItemType Directory -Force -Path $dest | Out-Null
+  $rc = Start-Process -FilePath robocopy -ArgumentList @("$pkgPath","$dest","/MIR","/R:2","/W:2","/NFL","/NDL","/NP") -PassThru -WindowStyle Hidden -Wait
+  Write-Log -Message 'Deploy done' -Data @{ package=$cmd.package; dest=$dest; exit=$rc.ExitCode }
+}
+
+function Handle-Run($cmd) {
+  $script = $cmd.script
+  if (-not (Test-Path $script)) { throw "Script not found: $script" }
+  $args = @()
+  if ($cmd.args) { $args = @($cmd.args) }
+  $p = Start-Process -FilePath powershell -ArgumentList (@('-NoProfile','-ExecutionPolicy','Bypass','-File',"$script") + $args) -WindowStyle Hidden -PassThru -Wait
+  Write-Log -Message 'Run done' -Data @{ script=$script; exit=$p.ExitCode }
+}
+
+function Handle-Sync($cmd) {
+  $src = $cmd.source; $dest = $cmd.dest
+  if (-not $src -or -not $dest) { throw 'sync requires source and dest' }
+  New-Item -ItemType Directory -Force -Path $dest | Out-Null
+  $rc = Start-Process -FilePath robocopy -ArgumentList @("$src","$dest","/MIR","/R:2","/W:2","/NFL","/NDL","/NP") -PassThru -WindowStyle Hidden -Wait
+  Write-Log -Message 'Sync done' -Data @{ source=$src; dest=$dest; exit=$rc.ExitCode }
+}
+
+function Handle-Ps($cmd) {
+  $code = $cmd.code
+  if (-not $code) { throw 'ps command requires a code property' }
+  $p = Start-Process -FilePath powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-Command',$code) -WindowStyle Hidden -PassThru -Wait
+  Write-Log -Message 'PS inline done' -Data @{ exit=$p.ExitCode; code=$code }
+}
+
+while ($true) {
+  try {
+    $cmdFile = Join-Path $MyQueue 'command.json'
+    if (Test-Path $cmdFile) {
+      $cmd = Get-Content $cmdFile -Encoding UTF8 | ConvertFrom-Json
+      Write-Log -Message 'Command received' -Data $cmd
+      switch ($cmd.type) {
+        'deploy' { Handle-Deploy $cmd }
+        'run'    { Handle-Run $cmd }
+        'sync'   { Handle-Sync $cmd }
+        'ps'     { Handle-Ps   $cmd }
+        Default  { throw "Unknown command type: $($cmd.type)" }
+      }
+      $done = Join-Path $MyQueue ("command_" + ($cmd.id ? $cmd.id : [guid]::NewGuid().ToString()) + '.done.json')
+      Move-Item -Path $cmdFile -Destination $done -Force
+      Write-Log -Message 'Command processed' -Data @{ done=$done }
+    }
+  } catch {
+    Write-Log -Level 'Error' -Message 'Agent loop error' -Data @{ error = "$_" }
+  }
+  Start-Sleep -Seconds $IntervalSec
+}

@@ -1,0 +1,44 @@
+﻿# PrecisePointway Consolidation Script (Enhanced)
+param(
+    [string[]]$SourceRoots = @("C:\PrecisePointway", "D:\PrecisePointway", "E:\PrecisePointway", "F:\PrecisePointway"),
+    [string]$TargetRoot = "Z:\PrecisePointway\master",
+    [string]$ManifestPath = "Z:\PrecisePointway\master\manifest.csv",
+    [string]$LogFile = "Z:\PrecisePointway\master\script_log.txt"
+)
+
+# Ensure the target directory exists
+if (-not (Test-Path -Path $TargetRoot)) {
+    New-Item -ItemType Directory -Path $TargetRoot | Out-Null
+    Write-Host "Directory $TargetRoot created."
+}
+
+Start-Transcript -Path $LogFile -Append
+
+try {
+    $manifest = @()
+    foreach ($srcRoot in $SourceRoots) {
+        if (Test-Path $srcRoot) {
+            Get-ChildItem -Path $srcRoot -Recurse -File | ForEach-Object {
+                $srcFile = $_.FullName
+                $relPath = $srcFile.Substring($srcRoot.Length).TrimStart('\')
+                $destFile = Join-Path $TargetRoot $relPath
+                $destDir = Split-Path $destFile -Parent
+                if (!(Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
+                Copy-Item -Path $srcFile -Destination $destFile -Force
+                $manifest += [PSCustomObject]@{
+                    Source = $srcFile
+                    Destination = $destFile
+                    Size = $_.Length
+                    LastWriteTime = $_.LastWriteTime
+                }
+            }
+        }
+    }
+    # Write manifest
+    $manifest | Export-Csv -Path $ManifestPath -NoTypeInformation -Encoding UTF8
+    Write-Host "PASS: Consolidation complete. Manifest at $ManifestPath"
+} catch {
+    Write-Error "An error occurred: $_"
+} finally {
+    Stop-Transcript
+}

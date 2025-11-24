@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "event_manifest",
+  "type": "object",
+  "required": ["event_type", "event_id", "timestamp", "payload"],
+  "properties": {
+    "event_type": { "const": "event_manifest" },
+    "event_id": { "type": "string", "minLength": 8 },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" },
+    "schema_version": { "type": ["string", "null"] },
+    "node_id": { "type": ["string", "null"] },
+    "payload": {
+      "type": "object",
+      "required": ["digest", "path", "signed_anchor", "gateway_verified", "created_utc"],
+      "properties": {
+        "digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+        "path": { "type": "string", "minLength": 1 },
+        "signed_anchor": { "type": "boolean" },
+        "gateway_verified": { "type": "boolean" },
+        "created_utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

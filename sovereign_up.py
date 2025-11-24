@@ -19,17 +19,16 @@ EVIDENCE_VERIFIED = ROOT / "Evidence" / "Analysis" / "_verified"
 PROPERTY_DRAFTS = ROOT / "Property" / "Scored" / "_drafts"
 
 
-def run(cmd: list[str], check=True) -> tuple[int, str]:
-    p = subprocess.run(cmd, capture_output=True, text=True)
+def run(cmd: list[str], check=True, env=None, cwd=None) -> tuple[int, str]:
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', env=env, cwd=cwd)
     if check and p.returncode != 0:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stdout}\n{p.stderr}")
     return p.returncode, (p.stdout + p.stderr)
 
 
-def need_cmd(name: str):
+def need_cmd(name: str) -> bool:
     rc, _ = run(["which" if os.name != "nt" else "where", name], check=False)
-    if rc != 0:
-        raise RuntimeError(f"Missing required command: {name}")
+    return rc == 0
 
 
 def seed_files():
@@ -37,11 +36,11 @@ def seed_files():
     PROPERTY_LEADS.mkdir(parents=True, exist_ok=True)
 
     (EVIDENCE_INBOX / "test_invoice_stable.txt").write_text(
-        "Invoice #101 for Sovereign Services.\nClient: Sovereign Systems Ltd.\nTotal Due: £450.00\n",
+        "Invoice #101 for Sovereign Services.\nClient: Sovereign Systems Ltd.\nTotal Due: ï¿½450.00\n",
         encoding="utf-8",
     )
     (PROPERTY_LEADS / "test_trap_fixer.txt").write_text(
-        "3 Bed House. 123 Test Rd. Asking £350k. Warning: Structural cracks visible in foundation.",
+        "3 Bed House. 123 Test Rd. Asking ï¿½350k. Warning: Structural cracks visible in foundation.",
         encoding="utf-8",
     )
 
@@ -50,7 +49,11 @@ def compose(*args: str):
     return run(DC + list(args))
 
 
-def boot_sequence(report: dict):
+def boot_sequence(report: dict, use_docker: bool):
+    if not use_docker:
+        report["containers"] = "SKIPPED (Local Mode)"
+        return
+
     # Clean and build
     compose("down", "--volumes", "--remove-orphans")
     compose("build")
@@ -84,14 +87,31 @@ def verify_tracks(report: dict):
     }
 
 
-def run_agents(report: dict):
+def run_agents(report: dict, use_docker: bool):
     # Seed data
     seed_files()
 
-    # Execute agents inside containers
-    ev_rc, ev_out = compose("run", "--rm", "evidence", "python", "src/agents/evidence_validator.py")
-    pr_rc, pr_out = compose("run", "--rm", "property", "python", "src/agents/property_analyst.py")
-    report["agent_runs"] = {"evidence": ev_out, "property": pr_out}
+    if use_docker:
+        # Execute agents inside containers
+        ev_rc, ev_out = compose("run", "--rm", "evidence", "python", "src/agents/evidence_validator.py")
+        pr_rc, pr_out = compose("run", "--rm", "property", "python", "src/agents/property_analyst.py")
+        report["agent_runs"] = {"evidence": ev_out, "property": pr_out}
+    else:
+        # Execute agents locally
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ROOT)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["SOVEREIGN_ROOT"] = str(ROOT)
+        
+        ev_script = ROOT / "src" / "agents" / "evidence_validator.py"
+        pr_script = ROOT / "src" / "agents" / "property_analyst.py"
+        
+        ev_rc, ev_out = run([sys.executable, str(ev_script)], check=False, env=env, cwd=ROOT)
+        pr_rc, pr_out = run([sys.executable, str(pr_script)], check=False, env=env, cwd=ROOT)
+        report["agent_runs"] = {
+            "evidence": f"RC={ev_rc}\n{ev_out}", 
+            "property": f"RC={pr_rc}\n{pr_out}"
+        }
 
 
 def verify_outputs(report: dict):
@@ -142,7 +162,11 @@ def verify_ledger(report: dict):
     script = ROOT / "scripts" / "verify_ledger.py"
     info = {"ran": False, "result": "skipped"}
     if script.exists():
-        rc, out = run([sys.executable, str(script)], check=False)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ROOT)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["SOVEREIGN_ROOT"] = str(ROOT)
+        rc, out = run([sys.executable, str(script)], check=False, env=env, cwd=ROOT)
         info = {"ran": True, "rc": rc, "output": out.strip()[:2000]}
     report["ledger_audit"] = info
 
@@ -150,12 +174,13 @@ def verify_ledger(report: dict):
 def main():
     report: dict = {"status": "INIT"}
     try:
-        need_cmd("docker")
-        need_cmd("docker-compose")
+        has_docker = need_cmd("docker") and need_cmd("docker-compose")
+        report["mode"] = "DOCKER" if has_docker else "LOCAL"
+        
         report["status"] = "BOOTING"
-        boot_sequence(report)
+        boot_sequence(report, has_docker)
         verify_tracks(report)
-        run_agents(report)
+        run_agents(report, has_docker)
         verify_outputs(report)
         verify_ledger(report)
         report["status"] = "GREEN" if report.get("verified") else "RED"

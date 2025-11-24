@@ -1,0 +1,36 @@
+﻿version: "0.1.0"
+policy:
+  name: "Trauma-Informed Interaction Standard"
+  scope:
+    - empathy_engine
+    - standards
+    - ui
+    - agents
+  enforcement_mode: "fail_closed"
+
+rules:
+  predictability: true
+  transparency: true
+  no_dark_patterns: true
+  no_identity_inference: true
+  no_coercive_language: true
+  slow_mode_on_distress: true
+  reversible_actions_required: true
+
+forbidden_phrases:
+  - "should"
+  - "must"
+  - "you have to"
+  - "urgent"
+  - "time-sensitive"
+  - "least you could"
+
+allowed_tone:
+  calm: true
+  optional_depth: true
+  no_pressure: true
+
+signing:
+  requires_signature: true
+  algorithm: "sha256"
+  signature_file: "policy_manifest.sig"

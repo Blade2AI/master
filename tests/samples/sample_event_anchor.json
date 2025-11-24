@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "anchor_id": "00000000-0000-0000-0000-000000000001",
+  "node_id": "node-archival-01",
+  "root_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "hash_algorithm": "sha256",
+  "timestamp_utc": "2025-11-21T15:30:00Z",
+  "backends": {
+    "arweave": { "enabled": true, "tx_id": null, "bundlr_node": null },
+    "ipfs": { "enabled": true, "cid": null, "provider": null }
+  },
+  "signature": { "alg": "ed25519", "key_id": "key-ed25519-01", "value": null },
+  "meta": { "backend_version": "flight-recorder-1.0.0", "environment": "proof" }
+}

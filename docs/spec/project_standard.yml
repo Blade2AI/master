@@ -1,0 +1,77 @@
+version: 1
+standard: SOV-Project-Standard
+
+project_types:
+  MICRO:
+    description: "1–5 days, single cell/line"
+    examples:
+      - "Reduce changeover time by 10%"
+      - "Re-layout station to reduce walk time"
+  MESO:
+    description: "2–12 weeks, multi-line or cross-functional"
+    examples:
+      - "New SIF reporting flow"
+      - "Introduce QSB fleet to new hall"
+  MACRO:
+    description: "3–24 months, site or enterprise level"
+    examples:
+      - "New line installation"
+      - "Site-wide sovereign deployment"
+
+fields:
+  id: "PROJ-<YEAR>-<SEQUENCE>"
+  type: "MICRO|MESO|MACRO"
+  title: "string"
+  owner: "PersonID"
+  sponsors:
+    - "ExecID"
+  links:
+    nodes:
+      - "NodeID"
+    SIF:
+      - "SIF-ID"
+    metrics:
+      - "MetricName"
+  method:
+    primary:
+      - "PDCA"
+      - "DMAIC"
+      - "8D"
+      - "KaizenEvent"
+    auto_escalation_rules:
+      - "If recurrence>3 and impact>£50k ? DMAIC"
+  status:
+    - "Proposed"
+    - "Approved"
+    - "InProgress"
+    - "Paused"
+    - "Completed"
+    - "Terminated"
+  stage:
+    - "Define"
+    - "Measure"
+    - "Analyze"
+    - "Improve"
+    - "Control"
+  backlog:
+    items:
+      - id: "TASK-…"
+        desc: "string"
+        assignee: "PersonID"
+        state: "Todo|Doing|Blocked|Done"
+        linked_evidence:
+          - "HARDLOG-ref"
+  gates:
+    - id: "GATE-1"
+      name: "Constitutional Approval"
+      decided_by: "Boardroom-13"
+      decision_id: "BD-2025-xxxx"
+      outcome: "Advance|Hold|Kill"
+      evidence:
+        - "TruthTest-ID"
+        - "SIF-ID"
+  roi:
+    expected_savings_year1: "decimal"
+    expected_savings_year3: "decimal"
+    capex: "decimal"
+    confirmed_savings: "decimal"

@@ -1,0 +1,23 @@
+﻿param(
+  [string[]]$Hosts,
+  [ValidateSet('deploy','run','sync')]$Type='run',
+  [string]$QueueRoot = "\\dxp4800plus-67ba\ops\Queue",
+  [string]$Package = '',
+  [string]$Dest = 'C:\\ops',
+  [string]$Script = '',
+  [string[]]$Args
+)
+
+if (-not $Hosts -or $Hosts.Count -eq 0) { throw 'Specify -Hosts list' }
+
+$cmd = [ordered]@{ id=[guid]::NewGuid().ToString(); type=$Type }
+if ($Type -eq 'deploy') { $cmd.package=$Package; $cmd.dest=$Dest }
+elseif ($Type -eq 'sync') { $cmd.source=$Package; $cmd.dest=$Dest }
+else { $cmd.script=$Script; if ($Args){$cmd.args=$Args} }
+
+foreach ($h in $Hosts) {
+  $dir = Join-Path $QueueRoot ($h.ToLower())
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  ($cmd | ConvertTo-Json -Depth 8) | Set-Content -Encoding UTF8 (Join-Path $dir 'command.json')
+  Write-Host "Queued $Type for $h (id=$($cmd.id))"
+}

@@ -1,0 +1,186 @@
+# README_SOVEREIGN_CRITICAL_HARVEST.md
+
+## Purpose
+The Sovereign Critical Harvest process consolidates essential personal, AI, and non-OEM application configuration data from fleet nodes onto a single target location (PC5 or an attached external drive). This enables rapid preservation, audit, deduplication, and later integrity verification under time pressure.
+
+## Modes
+1. DryRun (`-Mode DryRun`):
+   - Enumerates candidate files according to filters.
+   - Computes size totals per node and per category (personal, ai_data, apps).
+   - Computes hash-based uniqueness metrics when hashing enabled (unique vs duplicate content size).
+   - Writes `critical_size_estimate.json` and CSV report under `TARGET_ROOT/MANIFESTS`.
+   - No files are copied.
+2. Execute (`-Mode Execute`):
+   - Performs content hashing (if enabled), dedupe, resume-aware copying.
+   - Copies filtered files into structured folders:
+     - `USER_DATA/<node>/...`
+     - `AI_DATA/<node>/...`
+     - `APPS/<node>/...`
+   - Generates manifests (files, apps, hash index, errors/skipped) using safe write (temp + move).
+   - Discovers installed non-OEM apps via registry, copies install + config paths when within size thresholds.
+
+## Config (CriticalHarvestConfig.json)
+Key fields:
+- `target_root`: Destination base directory.
+- `nodes[]`: Each node has `name`, `root_paths[]`, `enabled`.
+- `include_extensions`: File extensions considered personal/critical.
+- `exclude_dirs`: Directory names ignored during traversal.
+- `identifier_patterns`: Strings increasing likelihood a file is personal/project-related.
+- `ai_markers`: Strings used to classify AI/editor data.
+- `oem_publishers`: Used to classify OEM apps and exclude from app copy.
+- `max_file_size_mb`: Skip individual files larger than this.
+- `oversize_app_folder_mb`: Skip copying install folders larger than this.
+- `hashing` section:
+  - `enabled`: true/false.
+  - `algorithm`: e.g. `SHA256`.
+  - `dedupe_enabled`: enable content de-duplication on Execute.
+  - `always_copy_duplicates`: force copy even if duplicate content already harvested.
+  - `max_hash_file_size_mb`: skip hashing files larger than this.
+- `copy_performance` section:
+  - `parallelism_enabled`: true/false (requires PowerShell 7+).
+  - `max_parallel_copies`: degree of parallel copy.
+  - `max_mb_per_second`: throttling (0 disables).
+
+## Output Structure
+```
+TARGET_ROOT/
+  MANIFESTS/
+    critical_size_estimate.json
+    critical_size_estimate.csv
+    files_collected.json
+    files_collected.csv
+    apps_collected.json
+    apps_collected.csv
+    installed_apps.json
+    installed_apps.csv
+    file_hash_index.json
+    file_hash_index.csv
+    errors_and_skipped.json
+  USER_DATA/<node>/...
+  AI_DATA/<node>/...
+  APPS/<node>/...
+```
+
+## Manifest Schemas
+`files_collected.json` entry:
+```
+{
+  "run_id": "<guid>",
+  "run_timestamp": "2025-11-23T10:05:00Z",
+  "node": "PC4",
+  "original_path": "C:/Users/andyj/Documents/report.pdf",
+  "dest_path": "E:/SOVEREIGN_CRITICAL/USER_DATA/PC4/Documents/report.pdf",
+  "size_bytes": 12345,
+  "category": "personal",
+  "source_area": "Documents",
+  "copied": true,
+  "duplicate_of": null,
+  "hash": "ab12...",
+  "hash_algorithm": "SHA256"
+}
+```
+
+`file_hash_index.json` entry:
+```
+{
+  "hash": "ab12...",
+  "hash_algorithm": "SHA256",
+  "node": "PC4",
+  "original_full_path": "C:/Users/andyj/Documents/report.pdf",
+  "size_bytes": 12345,
+  "first_seen_timestamp": "2025-11-23T10:05:00Z",
+  "copies": ["E:/SOVEREIGN_CRITICAL/USER_DATA/PC4/Documents/report.pdf"]
+}
+```
+
+`critical_size_estimate.json` structure:
+```
+{
+  "generated_utc": "2025-11-23T10:04:12Z",
+  "total_bytes": 1234567890,
+  "totals_by_node": {"PC4": 1234, "PC5": 4567},
+  "totals_by_category": {"personal": 123, "ai_data": 456, "apps": 789},
+  "file_count": 420,
+  "unique_content_size_bytes": 111,
+  "duplicate_content_size_bytes": 12,
+  "hashes_count": 400,
+  "max_file_size_mb": 10240
+}
+```
+
+`installed_apps.json` entry:
+```
+{
+  "app_name": "ExampleApp",
+  "publisher": "Vendor Inc.",
+  "display_version": "2.1.0",
+  "install_location": "C:/Program Files/ExampleApp",
+  "is_oem": false,
+  "copied": true,
+  "config_paths_copied": ["C:/Users/andyj/AppData/Roaming/ExampleApp"],
+  "approx_total_size_copied_bytes": 987654
+}
+```
+
+`errors_and_skipped.json` entry:
+```
+{
+  "node": "PC4",
+  "path": "C:/Users/andyj/HugeVideo.mov",
+  "reason": "OversizeFile",
+  "size_bytes": 987654321
+}
+```
+
+## Hashing + De-duplication
+- Enabled via `hashing.enabled` and `hashing.dedupe_enabled`.
+- If a file's content hash already exists and duplicates are not forced, the original path is recorded referencing existing evac path without recopying.
+- Saves space and strengthens integrity chain.
+
+## Incremental Resume
+- On Execute start, existing `files_collected.json` and `file_hash_index.json` (if present) are loaded.
+- Previously processed original paths are skipped.
+- Safe write strategy (temp file + move) prevents corruption on crash.
+- Each run adds `run_id` + `run_timestamp` for audit segmentation.
+
+## Registry-based App Discovery
+- Queries standard uninstall registry keys for installed apps.
+- Classifies OEM vs non-OEM using `oem_publishers`.
+- Copies install + discovered user config folders for non-OEM apps within size thresholds.
+- Records details in `installed_apps` manifests.
+
+## Parallel Copy + Throttling
+- If `copy_performance.parallelism_enabled` is true and PowerShell 7+, candidate file copies run in parallel up to `max_parallel_copies`.
+- Throttling enforced if `max_mb_per_second` > 0 to avoid saturating disk or network.
+- Defaults conservative (parallel off).
+
+## Changing Target Drive
+Edit `target_root` in config to a larger drive (e.g. external HDD). Re-run DryRun to compare `unique_content_size_bytes` to free space. Then Execute.
+
+## Integrity Integration
+Add `files_collected.json`, `file_hash_index.json`, and `installed_apps.json` to verification artifacts or anchor workflows by referencing their paths (environment flag or manual inclusion).
+
+## Run Examples
+Dry run:
+```
+pwsh -File C:/BladeOps/scripts/RUN-CriticalHarvest.ps1 -Mode DryRun -ConfigPath C:/BladeOps/config/CriticalHarvestConfig.json
+```
+Execute harvest:
+```
+pwsh -File C:/BladeOps/scripts/RUN-CriticalHarvest.ps1 -Mode Execute -ConfigPath C:/BladeOps/config/CriticalHarvestConfig.json
+```
+
+## Tuning
+- Disable hashing if time-constrained: set `hashing.enabled` false.
+- Force duplicate copies only if separate physical redundancy needed: set `always_copy_duplicates` true.
+- Increase `max_parallel_copies` cautiously; verify no I/O contention.
+
+## Limitations / Future
+- Hash skipping for very large files uses size threshold; could be upgraded to block-hash.
+- Resume currently path + size based; can be enhanced with evac file hash verification.
+- App config discovery uses name-based heuristics; consider explicit mapping list.
+
+## Safety Principles
+- Never deletes or alters source data.
+- All writes go only to `target_root`.
+- Manifests written atomically.

@@ -1,0 +1,9 @@
+﻿# Metrics rotation & aggregation configuration
+max_file_size_mb: 2
+rotate_interval: daily      # hourly | daily | weekly
+raw_retention_days: 30
+keep_last_n: 5000           # reserved for future record-count based pruning
+aggregation_interval: daily # hourly | daily | weekly
+max_total_size_mb: 20
+alert_if_success_rate_below: 0.95
+# Add future fields: p95_latency_threshold_ms, p99_latency_threshold_ms

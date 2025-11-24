@@ -1,0 +1,515 @@
+param(
+    [string]$WorkspacePath = $PSScriptRoot,
+    [string]$NasRoot = "\\dxp4800plus-67ba\ops",
+    [string]$SolutionFile = "",
+    [switch]$AutoNotify,
+    [string]$SlackWebhook = "",
+    [string[]]$GuestHosts = @('pc-1','pc-2','pc-3'),
+    [switch]$AutoDiscover,
+    [int]$PingCount = 4,
+    [switch]$DetailedMetrics
+)
+
+# Import network utilities if available
+$networkUtils = Join-Path $PSScriptRoot "Network-Utils.ps1"
+if (Test-Path $networkUtils) {
+    . $networkUtils
+}
+
+# Import your existing notification module if available
+$notifyModule = Join-Path $PSScriptRoot "Notify-Module.psm1"
+if (Test-Path $notifyModule) {
+    Import-Module $notifyModule -Force
+}
+
+#region Configuration and Setup
+$logDir = Join-Path $env:USERPROFILE "LiveShareLogs"
+if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logFile = Join-Path $logDir "LiveShare_Host_$timestamp.log"
+$linkFile = Join-Path $NasRoot "LiveShareLink.txt"
+$statusFile = Join-Path $NasRoot "LiveShareStatus.json"
+
+# Helper function for logging with motto integration
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $time = Get-Date -Format "HH:mm:ss"
+    $entry = "[$time] [$Level] $Message"
+    Write-Host $entry -ForegroundColor $(switch($Level) { "ERROR" {"Red"} "WARN" {"Yellow"} "SUCCESS" {"Green"} "MOTTO" {"Magenta"} default {"White"} })
+    Add-Content -Path $logFile -Value $entry
+}
+
+# ————————————————————————————————————————————————————————————————————————————————
+# ?? MOTTO: Start every collaboration session with kindness
+Write-Log "?? In a world you can be anything – be nice." "MOTTO"
+Write-Log "?? Starting collaborative C++ development session..." "MOTTO"
+# ————————————————————————————————————————————————————————————————————————————————
+
+# Fallback network discovery if Network-Utils.ps1 not available
+function Get-FleetGuests {
+    param(
+        [string[]]$PreferredHosts = @('pc-1','pc-2','pc-3'),
+        [switch]$AutoDiscover
+    )
+    
+    $discoveredGuests = @()
+    
+    if ($AutoDiscover) {
+        Write-Log "?? Auto-discovering guest PCs on network..." "INFO"
+        try {
+            # Try common PC naming patterns
+            $potentialGuests = @()
+            foreach ($i in 1..10) {
+                $potentialGuests += "pc-$i"
+                $potentialGuests += "dev-$i"
+                $potentialGuests += "workstation-$i"
+            }
+            
+            foreach ($guest in $potentialGuests) {
+                if (Test-Connection -ComputerName $guest -Count 1 -Quiet -ErrorAction SilentlyContinue) {
+                    $discoveredGuests += $guest
+                    Write-Log "  ? Discovered: $guest" "SUCCESS"
+                }
+            }
+        } catch {
+            Write-Log "Auto-discovery failed, using preferred hosts: $_" "WARN"
+        }
+    }
+    
+    # Fall back to preferred hosts or combine with discovered
+    if ($discoveredGuests.Count -eq 0) {
+        return $PreferredHosts
+    } else {
+        # Combine and deduplicate
+        $allGuests = ($discoveredGuests + $PreferredHosts) | Sort-Object -Unique
+        return $allGuests
+    }
+}
+
+# Fallback latency measurement if Network-Utils.ps1 not available
+function Measure-GuestLatency {
+    param(
+        [string[]]$Guests,
+        [int]$PingCount = 4,
+        [switch]$IncludeJitter
+    )
+    
+    Write-Log "?? Measuring network performance to guest PCs..." "INFO"
+    $networkMetrics = @{
+        Success = @()
+        Warning = @()
+        Error = @()
+    }
+    
+    foreach ($guestHost in $Guests) {
+        try {
+            Write-Log "  ?? Testing $guestHost"
+            $pingResults = Test-Connection -ComputerName $guestHost -Count $PingCount -ErrorAction SilentlyContinue
+            
+            if ($pingResults) {
+                $responseTimes = $pingResults | ForEach-Object { $_.ResponseTime }
+                $avgLatency = ($responseTimes | Measure-Object -Average).Average
+                $minLatency = ($responseTimes | Measure-Object -Minimum).Minimum
+                $maxLatency = ($responseTimes | Measure-Object -Maximum).Maximum
+                
+                $metrics = @{
+                    Average = [math]::Round($avgLatency, 2)
+                    Minimum = $minLatency
+                    Maximum = $maxLatency
+                    PacketLoss = 0
+                    Quality = ""
+                    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                }
+                
+                if ($IncludeJitter -and $responseTimes.Count -gt 1) {
+                    $jitter = 0
+                    for ($i = 1; $i -lt $responseTimes.Count; $i++) {
+                        $jitter += [math]::Abs($responseTimes[$i] - $responseTimes[$i-1])
+                    }
+                    $metrics.Jitter = [math]::Round($jitter / ($responseTimes.Count - 1), 2)
+                }
+                
+                # Determine quality based on average latency and jitter
+                $quality = if ($avgLatency -lt 5) { "Excellent" } 
+                          elseif ($avgLatency -lt 15) { "Good" } 
+                          elseif ($avgLatency -lt 50) { "Fair" } 
+                          else { "Poor" }
+                
+                if ($metrics.Jitter -and $metrics.Jitter -gt 10) {
+                    $quality += " (High Jitter)"
+                }
+                
+                $metrics.Quality = $quality
+                $networkMetrics[$guestHost] = $metrics
+                
+                $jitterText = if ($metrics.Jitter) { ", jitter: $($metrics.Jitter)ms" } else { "" }
+                Write-Log "  ?? $guestHost : ${avgLatency}ms avg, ${minLatency}-${maxLatency}ms range ($quality)$jitterText" "SUCCESS"
+            } else {
+                $networkMetrics[$guestHost] = @{
+                    Average = $null
+                    PacketLoss = 100
+                    Quality = "Unreachable"
+                    Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                }
+                Write-Log "  ? $guestHost : Unreachable" "WARN"
+            }
+        } catch {
+            $networkMetrics[$guestHost] = @{
+                Average = $null
+                PacketLoss = 100
+                Quality = "Error"
+                Error = $_.Exception.Message
+                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            }
+            Write-Log "  ? Failed to test $guestHost : $_" "ERROR"
+        }
+    }
+    
+    return $networkMetrics
+}
+
+# Helper function to configure LAN-only mode on guests
+function Set-GuestLANMode {
+    param([string[]]$Guests)
+    
+    Write-Log "?? Configuring LAN-only mode on guest PCs..." "INFO"
+    Write-Log "?? Sharing optimized collaboration settings with kindness..." "MOTTO"
+    
+    foreach ($guestHost in $Guests) {
+        try {
+            Write-Log "  ?? Configuring $guestHost for direct connection"
+            
+            # Use Invoke-Command for remote configuration
+            $configResult = Invoke-Command -ComputerName $guestHost -ScriptBlock {
+                try {
+                    $settingsPath = "$env:APPDATA\Code\User\settings.json"
+                    $settingsDir = Split-Path $settingsPath -Parent
+                    
+                    # Ensure settings directory exists
+                    if (!(Test-Path $settingsDir)) {
+                        New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+                    }
+                    
+                    # Read existing settings or create new
+                    if (Test-Path $settingsPath) {
+                        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+                        if (-not $json) { $json = [PSCustomObject]@{} }
+                    } else {
+                        $json = [PSCustomObject]@{}
+                    }
+                    
+                    # Add Live Share settings for LAN-only mode with kindness
+                    if (-not $json.PSObject.Properties.Name -contains "liveshare.connectionMode") {
+                        $json | Add-Member -Type NoteProperty -Name "liveshare.connectionMode" -Value "direct" -Force
+                    } else {
+                        $json."liveshare.connectionMode" = "direct"
+                    }
+                    
+                    if (-not $json.PSObject.Properties.Name -contains "liveshare.allowGuestDebugControl") {
+                        $json | Add-Member -Type NoteProperty -Name "liveshare.allowGuestDebugControl" -Value $true -Force
+                    } else {
+                        $json."liveshare.allowGuestDebugControl" = $true
+                    }
+                    
+                    if (-not $json.PSObject.Properties.Name -contains "liveshare.allowGuestTaskControl") {
+                        $json | Add-Member -Type NoteProperty -Name "liveshare.allowGuestTaskControl" -Value $true -Force
+                    } else {
+                        $json."liveshare.allowGuestTaskControl" = $true
+                    }
+                    
+                    # Write settings back
+                    $json | ConvertTo-Json -Depth 10 | Set-Content $settingsPath -Encoding UTF8
+                    return "SUCCESS: LAN-only mode configured with collaborative kindness"
+                } catch {
+                    return "ERROR: $($_.Exception.Message)"
+                }
+            } -ErrorAction SilentlyContinue
+            
+            if ($configResult -and $configResult.StartsWith("SUCCESS")) {
+                Write-Log "  ? $guestHost configured successfully with care" "SUCCESS"
+            } else {
+                Write-Log "  ??  $guestHost configuration result: $configResult" "WARN"
+            }
+            
+        } catch {
+            Write-Log "  ? Failed to configure $guestHost : $_" "ERROR"
+        }
+    }
+}
+
+# Cleanup handler with motto
+$global:cleanupTriggered = $false
+Register-EngineEvent PowerShell.Exiting -Action {
+    if (-not $global:cleanupTriggered) {
+        Write-Log "?? Cleanup triggered - stopping Live Share session" "WARN"
+        Write-Log "?? In a world you can be anything – be nice." "MOTTO"
+        
+        try {
+            # Try to stop the Live Share session gracefully
+            & code --command liveshare.end 2>$null
+            # Clear the link file
+            if (Test-Path $linkFile) { Remove-Item $linkFile -Force }
+            # Update status
+            @{
+                Status = "Stopped"
+                Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                Host = $env:COMPUTERNAME
+                Motto = "In a world you can be anything – be nice."
+            } | ConvertTo-Json | Set-Content $statusFile -Encoding UTF8
+        } catch {
+            Write-Log "Error during cleanup: $_" "ERROR"
+        }
+        $global:cleanupTriggered = $true
+    }
+}
+#endregion
+
+try {
+    Write-Log "?? Starting Live Share host bootstrap on $env:COMPUTERNAME" "SUCCESS"
+    
+    # Ensure NAS connectivity
+    if (-not (Test-Path $NasRoot)) {
+        Write-Log "? Cannot access NAS at $NasRoot - check network connectivity" "ERROR"
+        exit 1
+    }
+    
+    Set-Location $WorkspacePath
+    
+    # Auto-discover guests if requested
+    if ($AutoDiscover) {
+        $GuestHosts = Get-FleetGuests -PreferredHosts $GuestHosts -AutoDiscover
+        Write-Log "?? Target guest PCs: $($GuestHosts -join ', ')" "INFO"
+        Write-Log "?? Extending collaboration invitation to all discovered friends..." "MOTTO"
+    }
+    
+    # Pull latest changes
+    Write-Log "?? Pulling latest changes from Git"
+    try {
+        $gitOutput = git pull 2>&1
+        Write-Log "Git pull result: $gitOutput"
+    } catch {
+        Write-Log "Git pull failed: $_" "WARN"
+    }
+    
+    # Pre-configure guests for LAN-only mode
+    Write-Log "??? Pre-configuring guest PCs for optimal Live Share performance..."
+    Set-GuestLANMode -Guests $GuestHosts
+    
+    # Find solution file if not specified
+    if (-not $SolutionFile) {
+        $solutionFiles = Get-ChildItem -Recurse -Filter "*.sln" | Where-Object { $_.FullName -notmatch "\.vscode.*extensions" }
+        if ($solutionFiles.Count -eq 1) {
+            $SolutionFile = $solutionFiles[0].FullName
+            Write-Log "?? Auto-detected solution: $SolutionFile"
+        } elseif ($solutionFiles.Count -gt 1) {
+            $SolutionFile = $solutionFiles[0].FullName
+            Write-Log "?? Multiple solutions found, using: $SolutionFile" "WARN"
+        }
+    }
+    
+    # Launch VS Code with the workspace
+    Write-Log "?? Launching VS Code with workspace"
+    Write-Log "?? Opening the door to collaborative C++14 development..." "MOTTO"
+    
+    if ($SolutionFile -and (Test-Path $SolutionFile)) {
+        Start-Process code -ArgumentList "`"$SolutionFile`""
+    } else {
+        Start-Process code -ArgumentList "`"$WorkspacePath`""
+    }
+    
+    # Wait for VS Code to start and Live Share to initialize
+    Write-Log "? Waiting for VS Code and Live Share to initialize..."
+    Start-Sleep -Seconds 15
+    
+    # Check if Live Share extension is available
+    $liveShareCheck = & code --list-extensions 2>$null | Where-Object { $_ -match "ms-vsliveshare" }
+    if (-not $liveShareCheck) {
+        Write-Log "? Live Share extension not found. Please install it first." "ERROR"
+        Write-Log "Install with: code --install-extension ms-vsliveshare.vsliveshare" "INFO"
+        exit 1
+    }
+    
+    # Start Live Share session
+    Write-Log "?? Starting Live Share session..."
+    Write-Log "?? Creating a space where collaboration flourishes..." "MOTTO"
+    
+    $sessionResult = & code --command liveshare.start 2>&1
+    Start-Sleep -Seconds 10
+    
+    # Try to get the Live Share link through VS Code CLI
+    Write-Log "?? Retrieving Live Share session link..."
+    $linkRetrieved = $false
+    $attempts = 0
+    $maxAttempts = 6
+    
+    while (-not $linkRetrieved -and $attempts -lt $maxAttempts) {
+        $attempts++
+        try {
+            # Try different methods to get the link
+            $linkInfo = & code --command liveshare.showSessionDetails 2>$null
+            if ($linkInfo -match 'https?://[^\s]+') {
+                $link = $Matches[0]
+                $linkRetrieved = $true
+            } else {
+                # Alternative: check clipboard (Live Share often copies link there)
+                Add-Type -AssemblyName System.Windows.Forms
+                $clipboardText = [System.Windows.Forms.Clipboard]::GetText()
+                if ($clipboardText -match 'https://[^\s]*liveshare[^\s]*') {
+                    $link = $Matches[0]
+                    $linkRetrieved = $true
+                }
+            }
+        } catch {
+            Write-Log "Attempt $attempts failed: $_" "WARN"
+        }
+        
+        if (-not $linkRetrieved) {
+            Write-Log "? Waiting for Live Share link... (attempt $attempts/$maxAttempts)"
+            Start-Sleep -Seconds 10
+        }
+    }
+    
+    if ($linkRetrieved) {
+        Write-Log "?? Live Share link retrieved: $link" "SUCCESS"
+        Write-Log "?? Sharing the gift of collaboration..." "MOTTO"
+        
+        # Write link to NAS for guests to consume
+        Set-Content -Path $linkFile -Value $link -Encoding ASCII
+        Write-Log "?? Link written to $linkFile"
+        
+        # Measure latency to all guest PCs with enhanced metrics
+        $latencies = Measure-GuestLatency -Guests $GuestHosts -PingCount $PingCount -IncludeJitter:$DetailedMetrics
+        
+        # Create comprehensive status object with motto
+        $status = @{
+            Status = "Active"
+            Link = $link
+            Timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            Host = $env:COMPUTERNAME
+            Workspace = $WorkspacePath
+            Solution = $SolutionFile
+            GuestLatencies = $latencies
+            NetworkOptimized = $true
+            ConnectionMode = "direct"
+            CppStandard = "C++14"
+            AutoDiscovered = $AutoDiscover
+            GuestCount = $GuestHosts.Count
+            Motto = "In a world you can be anything – be nice."
+            CollaborationSpirit = "Kindness-driven development"
+        }
+        
+        $status | ConvertTo-Json -Depth 5 | Set-Content $statusFile -Encoding UTF8
+        Write-Log "?? Status updated in $statusFile with network metrics and collaborative spirit"
+        
+        # Display enhanced network performance summary
+        Write-Log ""
+        Write-Log "?? Enhanced Network Performance Summary:" "SUCCESS"
+        Write-Log "?? Building bridges of collaboration with optimal performance..." "MOTTO"
+        
+        foreach ($guest in $GuestHosts) {
+            $metrics = $latencies[$guest]
+            if ($metrics -and $metrics.Average) {
+                $latency = $metrics.Average
+                $quality = $metrics.Quality
+                $range = "$($metrics.Minimum)-$($metrics.Maximum)ms"
+                $jitterText = if ($metrics.Jitter) { ", jitter: $($metrics.Jitter)ms" } else { "" }
+                
+                $color = if ($latency -lt 15) { "SUCCESS" } elseif ($latency -lt 50) { "WARN" } else { "ERROR" }
+                Write-Log "   $guest : ${latency}ms avg, range: $range ($quality)$jitterText" $color
+            } else {
+                Write-Log "   $guest : Unreachable - extending patience and understanding" "ERROR"
+            }
+        }
+        
+        # Performance recommendations with kindness
+        $highLatencyGuests = $GuestHosts | Where-Object { 
+            $latencies[$_] -and $latencies[$_].Average -and $latencies[$_].Average -gt 50 
+        }
+        
+        if ($highLatencyGuests.Count -gt 0) {
+            Write-Log ""
+            Write-Log "??  Performance Notice (with understanding):" "WARN"
+            Write-Log "   Higher latency detected on: $($highLatencyGuests -join ', ')"
+            Write-Log "   ?? Consider checking network infrastructure - every PC deserves optimal connection"
+        }
+        
+        $highJitterGuests = $GuestHosts | Where-Object {
+            $latencies[$_] -and $latencies[$_].Jitter -and $latencies[$_].Jitter -gt 10
+        }
+        
+        if ($highJitterGuests.Count -gt 0) {
+            Write-Log ""
+            Write-Log "??  Network Stability Notice (with patience):" "WARN"
+            Write-Log "   Connection variance detected on: $($highJitterGuests -join ', ')"
+            Write-Log "   ?? This may affect collaboration experience - treating all connections with care"
+        }
+        
+        # Send notifications if configured
+        if ($AutoNotify -and $SlackWebhook) {
+            try {
+                $latencyText = ($latencies.GetEnumerator() | ForEach-Object { 
+                    $metrics = $_.Value
+                    if ($metrics.Average) { 
+                        $jitterText = if ($metrics.Jitter) { " (jitter: $($metrics.Jitter)ms)" } else { "" }
+                        "• $($_.Key): $($metrics.Average)ms ($($metrics.Quality))$jitterText" 
+                    } else { 
+                        "• $($_.Key): Unreachable" 
+                    }
+                }) -join "`n"
+                
+                $payload = @{
+                    text = "?? **Live Share Session Started with Kindness!**`n" +
+                           "?? *In a world you can be anything – be nice.*`n`n" +
+                           "Host: $env:COMPUTERNAME`n" +
+                           "Project: $(Split-Path -Leaf $WorkspacePath)`n" +
+                           "Mode: Direct LAN (Optimized with Care)`n" +
+                           "C++ Standard: C++14`n" +
+                           "Guests: $($GuestHosts.Count) $(if ($AutoDiscover) { '(auto-discovered)' })`n" +
+                           "Link: $link`n`n" +
+                           "**Enhanced Network Metrics:**`n$latencyText`n`n" +
+                           "Join now for collaborative C++ development! ??"
+                } | ConvertTo-Json
+                
+                Invoke-RestMethod -Uri $SlackWebhook -Method Post -Body $payload -ContentType "application/json"
+                Write-Log "?? Notification sent to Slack with enhanced performance metrics and collaborative spirit" "SUCCESS"
+            } catch {
+                Write-Log "Failed to send Slack notification: $_" "WARN"
+            }
+        }
+        
+        Write-Log "? Live Share host is ready! Enhanced session details:" "SUCCESS"
+        Write-Log "?? Welcome to a collaboration space built with kindness..." "MOTTO"
+        Write-Log "   - Link: $link"
+        Write-Log "   - Host: $env:COMPUTERNAME"
+        Write-Log "   - Workspace: $WorkspacePath"
+        Write-Log "   - Connection Mode: Direct LAN (Optimized)"
+        Write-Log "   - C++ Standard: C++14"
+        Write-Log "   - Guest PCs: $($GuestHosts.Count) $(if ($AutoDiscover) { '(auto-discovered)' })"
+        Write-Log "   - Collaboration Spirit: Kindness-driven development"
+        Write-Log ""
+        Write-Log "?? Guests can join with love:"
+        Write-Log "   1. Run the Join task in VS Code"
+        Write-Log "   2. Check $linkFile for the link"
+        Write-Log "   3. Use: code --command liveshare.join $link"
+        Write-Log ""
+        Write-Log "?? Remember: In this collaborative space, we approach every challenge with kindness..."
+        Write-Log "Press Ctrl+C to gracefully end the session"
+        
+        # Keep the session alive with enhanced periodic monitoring
+        while ($true) {
+            Start-Sleep -Seconds 60
+            
+            # Periodic status check and enhanced latency monitoring
+            try {
+                $sessionStatus = & code --command liveshare.showSessionDetails 2>$null
+                if (-not $sessionStatus -or $sessionStatus -match "No active session") {
+                    Write-Log "?? Live Share session appears to have ended" "WARN"
+                    break
+                }
+                
+                # Update latencies every 5 minutes with enhanced metrics
+                $currentMinute = (Get-Date).Minute
+                if ($currentMinute % 5 -eq 0) {
+                    Write-Log "?? Updating enhanced network metrics with care..."
+                    $updatedLatencies = Measure-GuestLatency -Guests $GuestHosts -PingCount $Ping

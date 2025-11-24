@@ -1,0 +1,25 @@
+﻿ORG := SovereignSystemsLtd
+REPOS := Precision Pointway Blade2AI
+ROOT := C:/vs-studio-projects
+
+.PHONY: all discovery solutions clone bootstrap health audit
+
+all: discovery solutions clone bootstrap health audit
+
+discovery:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Discovery-RepoRemotes.ps1 -Root "$(ROOT)" -Repos $(REPOS)
+
+solutions:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Discovery-Solutions.ps1 -Root "$(ROOT)"
+
+clone:
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "foreach($r in '$(REPOS)'.Split(' ')){ if(!(Test-Path '$(ROOT)/'+$r)){ git clone https://github.com/$(ORG)/$r.git $(ROOT)/$r } else { Write-Host '[SKIP] '+$r } }"
+
+bootstrap:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Bootstrap-All.ps1 -Root "$(ROOT)" -Repos $(REPOS)
+
+health:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Healthcheck.ps1
+
+audit:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Ledger-Audit.ps1

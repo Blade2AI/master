@@ -1,0 +1,46 @@
+﻿name: evidence-pack
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build-evidence-pack:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          pip install jsonschema pytest
+
+      - name: Generate evidence pack
+        run: pwsh -File scripts/generate_evidence_pack.ps1 -OutDir artifacts/evidence_pack
+
+      - name: Validate anchor schema (sample)
+        run: python scripts/validate_json.py --schema schemas/event_anchor.json --instance tests/samples/sample_event_anchor.json
+
+      - name: Run GDPR sanitisation guard
+        run: pytest tests/test_anchor_gdpr_guard.py -q
+
+      - name: Merkle determinism test
+        run: pytest tests/test_merkle_determinism.py -q
+
+      - name: Upload evidence pack artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-pack
+          path: artifacts/evidence_pack/*
+          if-no-files-found: error
+
+      - name: Show summary
+        run: |
+          Get-Content artifacts/evidence_pack/evidence_summary.json | Write-Host
+        shell: pwsh

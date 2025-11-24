@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Evidence Drill-Down Schema",
+  "type": "object",
+  "properties": {
+    "build_id": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "standard": { "type": "string" },
+    "clause": { "type": "string" },
+    "status": { "type": "string", "enum": ["pass", "warn", "fail"] },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string" },
+          "signature": { "type": "string" },
+          "merkle_root_before": { "type": "string" },
+          "merkle_root_after": { "type": "string" }
+        },
+        "required": ["path", "sha256"]
+      }
+    }
+  },
+  "required": ["build_id", "timestamp", "status", "artifacts"]
+}

@@ -1,0 +1,19 @@
+# cppcheck configuration for Sovereign System verification components
+# Focus: security, memory, portability issues in cryptographic and verifier code
+# Suppress third-party or generated code noise.
+
+# Paths to ignore (external libs, test data, vendored headers)
+-i deps/catch2/
+-i deps/libsodium/
+-i build/
+
+# Enable comprehensive checks; style suppressed in CI context to reduce noise.
+--enable=warning,performance,portability,information
+--inconclusive
+
+# Treat these patterns as library code (skip duplicate symbol / style spam)
+--library=std
+--suppress=missingIncludeSystem
+--suppress=unusedFunction
+
+# Exit code policy handled by script (run-static-analysis.sh)

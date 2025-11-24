@@ -1,0 +1,156 @@
+﻿[CmdletBinding()]param(
+  [ValidateSet('DryRun','Execute')] [string]$Mode = 'DryRun',
+  [string]$ConfigPath = 'config/CriticalHarvestConfig.json',
+  [switch]$Verbose,
+  [int]$HashSampleMaxBytes = 0
+)
+
+function Write-Info($m){ Write-Host "[Harvest] $m" -ForegroundColor Cyan }
+function Write-Warn($m){ Write-Host "[Harvest] $m" -ForegroundColor Yellow }
+function Write-Err($m){ Write-Host "[Harvest] $m" -ForegroundColor Red }
+
+$ErrorActionPreference='Stop'
+
+if(-not (Test-Path $ConfigPath)){ Write-Err "Config not found: $ConfigPath"; exit 1 }
+$cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+$targetRoot = $cfg.target_root
+if(-not $targetRoot){ Write-Err "target_root missing in config"; exit 1 }
+
+$includeExt = @($cfg.include_extensions | ForEach-Object { $_.ToLower() })
+$excludeDirs = @($cfg.exclude_dirs)
+$identifierPatterns = @($cfg.identifier_patterns)
+$aiMarkers = @($cfg.ai_markers)
+$maxFileSizeBytes = [long]($cfg.max_file_size_mb * 1MB)
+
+function Ensure-Dir($p){ if(-not (Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+function Safe-RelPath($base,$full){ try { return ([IO.Path]::GetRelativePath($base,$full)) } catch { return $full } }
+function Classify-Category($path){
+  $lower = $path.ToLower()
+  foreach($m in $aiMarkers){ if($lower -match [Regex]::Escape($m.ToLower())){ return 'ai_data' } }
+  foreach($id in $identifierPatterns){ if($lower -match [Regex]::Escape($id.ToLower())){ return 'personal' } }
+  if($lower -match 'appdata' -or $lower -match 'programdata'){ return 'apps' }
+  return 'personal'
+}
+function Get-SourceArea($path){
+  $segments = $path -split '[\\/]'
+  foreach($s in @('Desktop','Documents','Downloads','Pictures','Videos','Music','AppData','ProgramData')){ if($segments -contains $s){ return $s } }
+  return 'General'
+}
+function Should-IncludeFile($file){
+  $ext = ($file.Extension).ToLower()
+  if($includeExt -contains $ext){ return $true }
+  # allow AI/config markers even if extension not in list
+  $lower = $file.FullName.ToLower()
+  foreach($m in $aiMarkers){ if($lower -match [Regex]::Escape($m.ToLower())){ return $true } }
+  foreach($id in $identifierPatterns){ if($lower -match [Regex]::Escape($id.ToLower())){ return $true } }
+  return $false
+}
+function Is-ExcludedDirName($name){ return $excludeDirs -contains $name }
+
+$drySummary = [ordered]@{ generated_utc=(Get-Date).ToString('o'); total_bytes=0; totals_by_node=@{}; totals_by_category=@{ personal=0; ai_data=0; apps=0 }; file_count=0; max_file_size_mb=$cfg.max_file_size_mb }
+$collected=@(); $appsCollected=@(); $skipped=@(); $errors=@();
+
+foreach($node in $cfg.nodes){
+  if(-not $node.enabled){ continue }
+  $nodeName=$node.name
+  if(-not $drySummary.totals_by_node.ContainsKey($nodeName)){ $drySummary.totals_by_node[$nodeName]=0 }
+  foreach($root in $node.root_paths){
+    if(-not (Test-Path $root)){ Write-Warn "Root path missing ($nodeName): $root"; continue }
+    Write-Info "Scanning $nodeName root: $root"
+    try {
+      Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+        $f = $_
+        $parentDirs = ($f.DirectoryName -split '[\\/]')
+        if($parentDirs | Where-Object { Is-ExcludedDirName $_ }){ return }
+        if(-not (Should-IncludeFile $f)){ return }
+        $size = $f.Length
+        $category = Classify-Category $f.FullName
+        $drySummary.total_bytes += $size
+        $drySummary.totals_by_node[$nodeName] += $size
+        $drySummary.totals_by_category[$category] += $size
+        $drySummary.file_count++
+        if($Mode -eq 'DryRun'){ return }
+        if($size -gt $maxFileSizeBytes){
+          $skipped += [pscustomobject]@{ node=$nodeName; path=$f.FullName; reason='OversizeFile'; size_bytes=$size }
+          return
+        }
+        $destCategoryDir = switch($category){ 'ai_data' { 'AI_DATA' } 'apps' { 'APPS' } default { 'USER_DATA' } }
+        $destBase = Join-Path $targetRoot $destCategoryDir
+        $destNodeBase = Join-Path $destBase $nodeName
+        Ensure-Dir $destNodeBase
+        # Preserve subpath relative to root if possible
+        $rel = Safe-RelPath $root $f.FullName
+        $destFull = Join-Path $destNodeBase $rel
+        $destDir = Split-Path $destFull -Parent
+        Ensure-Dir $destDir
+        if(Test-Path $destFull){
+          $destInfo = Get-Item $destFull
+          if($destInfo.Length -eq $size){
+            $collected += [pscustomobject]@{ node=$nodeName; original_path=$f.FullName; dest_path=$destFull; size_bytes=$size; category=$category; source_area=(Get-SourceArea $f.FullName); copied=$false }
+            return
+          } else {
+            # collision diff size -> rename
+            $destFull = $destFull + '.copy'
+          }
+        }
+        try {
+          Copy-Item -LiteralPath $f.FullName -Destination $destFull -Force
+          $collected += [pscustomobject]@{ node=$nodeName; original_path=$f.FullName; dest_path=$destFull; size_bytes=$size; category=$category; source_area=(Get-SourceArea $f.FullName); copied=$true }
+          if($category -eq 'apps'){ $appsCollected += $collected[-1] }
+        } catch {
+          $errors += [pscustomobject]@{ node=$nodeName; path=$f.FullName; reason='CopyFailed'; message=$_.Exception.Message }
+        }
+      }
+    } catch {
+      $errors += [pscustomobject]@{ node=$nodeName; path=$root; reason='TraversalError'; message=$_.Exception.Message }
+    }
+  }
+}
+
+if($Mode -eq 'DryRun'){
+  # Output size estimate manifest (does not require targetRoot to exist yet)
+  $manifestDir = Join-Path $targetRoot 'MANIFESTS'
+  Ensure-Dir $manifestDir
+  $sizeJson = $drySummary | ConvertTo-Json -Depth 6
+  Set-Content -Path (Join-Path $manifestDir 'critical_size_estimate.json') -Value $sizeJson -Encoding UTF8
+  $csvLines = @('node,bytes')
+  foreach($kv in $drySummary.totals_by_node.GetEnumerator()){ $csvLines += ($kv.Key + ',' + $kv.Value) }
+  $csvLines += 'category,bytes'
+  foreach($kv in $drySummary.totals_by_category.GetEnumerator()){ $csvLines += ($kv.Key + ',' + $kv.Value) }
+  Set-Content -Path (Join-Path $manifestDir 'critical_size_estimate.csv') -Value ($csvLines -join "`n") -Encoding UTF8
+  $totalGB = [math]::Round($drySummary.total_bytes/1GB,2)
+  $personalGB = [math]::Round($drySummary.totals_by_category['personal']/1GB,2)
+  $aiGB = [math]::Round($drySummary.totals_by_category['ai_data']/1GB,2)
+  $appsGB = [math]::Round($drySummary.totals_by_category['apps']/1GB,2)
+  Write-Info "DryRun complete. Total candidate size: $totalGB GB (Personal: $personalGB GB, AI: $aiGB GB, Apps: $appsGB GB). Files: $($drySummary.file_count)"
+  exit 0
+}
+
+# Execute mode manifests
+$manifestDir = Join-Path $targetRoot 'MANIFESTS'
+Ensure-Dir $manifestDir
+
+$collected | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $manifestDir 'files_collected.json') -Encoding UTF8
+$appsCollected | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $manifestDir 'apps_collected.json') -Encoding UTF8
+$skipped + $errors | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $manifestDir 'errors_and_skipped.json') -Encoding UTF8
+
+# CSV outputs
+function Write-Csv($items,$path){
+  if(-not $items){ return }
+  $props = $items[0].PSObject.Properties.Name
+  $lines = @($props -join ',')
+  foreach($it in $items){
+    $vals = @()
+    foreach($p in $props){
+      $v = $it.$p
+      if($v -is [string]){ $vals += ('"' + ($v.Replace('"','''')) + '"') } else { $vals += $v }
+    }
+    $lines += ($vals -join ',')
+  }
+  Set-Content -Path $path -Value ($lines -join "`n") -Encoding UTF8
+}
+Write-Csv $collected (Join-Path $manifestDir 'files_collected.csv')
+Write-Csv $appsCollected (Join-Path $manifestDir 'apps_collected.csv')
+Write-Csv ($skipped + $errors) (Join-Path $manifestDir 'errors_and_skipped.csv')
+
+Write-Info "Execute complete. Collected=$($collected.Count) Apps=$($appsCollected.Count) Skipped=$($skipped.Count) Errors=$($errors.Count)"

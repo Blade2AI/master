@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+"""
+sign_anchor.py
+
+Safety-first anchor signer:
+
+- Ensures anchor payload contains only technical metadata (no obvious PII).
+- Canonicalises JSON.
+- Computes HMAC-SHA256 using a secret key from env.
+- Writes a detached signature receipt alongside the anchor JSON.
+
+Usage:
+  python scripts/sign_anchor.py --anchor out/anchors/event_anchor_123.json
+
+Env:
+  ANCHOR_SIGNING_SECRET   - required; random secret string used for HMAC
+  ANCHOR_KEY_ID           - optional; human-readable key ID recorded in receipt
+"""
+
+import argparse
+import hashlib
+import hmac
+import json
+import os
+from pathlib import Path
+from datetime import datetime
+from typing import Any, Dict
+
+# VERY simple field name blacklist. You can expand this as needed.
+PII_FIELD_HINTS = {
+    "name",
+    "email",
+    "phone",
+    "address",
+    "ip",
+    "user",
+    "username",
+    "dob",
+    "ni_number",
+    "national_insurance",
+}
+
+
+def scan_for_pii(obj: Any, path: str = "") -> list[str]:
+    """Very rough PII guardrail: flags suspicious field names."""
+    hits: list[str] = []
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            key_lower = str(k).lower()
+            if any(hint in key_lower for hint in PII_FIELD_HINTS):
+                hits.append(f"{path}.{k}".lstrip("."))
+            hits.extend(scan_for_pii(v, path=f"{path}.{k}".lstrip(".")))
+    elif isinstance(obj, list):
+        for idx, v in enumerate(obj):
+            hits.extend(scan_for_pii(v, path=f"{path}[{idx}]"))
+
+    return hits
+
+
+def canonical_json(obj: Any) -> str:
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+
+
+def sign_payload(payload: str, secret: str) -> str:
+    sig = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256)
+    return sig.hexdigest()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--anchor",
+        required=True,
+        help="Path to anchor JSON file to sign.",
+    )
+    args = parser.parse_args()
+
+    anchor_path = Path(args.anchor).resolve()
+    if not anchor_path.exists():
+        raise SystemExit(f"Anchor JSON not found: {anchor_path}")
+
+    secret = os.getenv("ANCHOR_SIGNING_SECRET")
+    if not secret:
+        raise SystemExit("ANCHOR_SIGNING_SECRET not set in environment – refusing to sign.")
+
+    key_id = os.getenv("ANCHOR_KEY_ID", "default")
+
+    raw = anchor_path.read_text(encoding="utf-8")
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        raise SystemExit(f"Failed to parse anchor JSON: {e}")
+
+    # PII guardrail
+    pii_hits = scan_for_pii(data)
+    if pii_hits:
+        hits_str = ", ".join(pii_hits[:10])
+        raise SystemExit(
+            f"Refusing to sign anchor – potential PII-like fields detected at: {hits_str}"
+        )
+
+    canon = canonical_json(data)
+    sig_hex = sign_payload(canon, secret)
+
+    receipt: Dict[str, Any] = {
+        "anchor_path": str(anchor_path),
+        "algo": "HMAC-SHA256",
+        "key_id": key_id,
+        "signature_hex": sig_hex,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "payload_sha256": hashlib.sha256(canon.encode("utf-8")).hexdigest(),
+    }
+
+    out_path = anchor_path.with_suffix(anchor_path.suffix + ".sig.json")
+    out_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+
+    print(f"[SIGN] Anchor signed ? {out_path}")
+
+
+if __name__ == "__main__":
+    main()

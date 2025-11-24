@@ -1,0 +1,20 @@
+﻿// Catch2 single-header placeholder for tests
+// For brevity in this environment, we add a minimal stub that provides TEST_CASE and REQUIRE macros.
+#pragma once
+#include <iostream>
+#include <stdexcept>
+#include <string>
+
+#define TEST_CASE(name) void test_##name()
+#define REQUIRE(x) do { if (!(x)) { std::cerr << "Test failed: " #x << std::endl; throw std::runtime_error("Test failure"); } } while(0)
+
+// A simple runner
+static int run_all_tests() {
+    extern void test_Merkle_RightOrder_ComputesExpectedRoot();
+    extern void test_Merkle_TamperedFile_FailsMatch();
+    int passed = 0;
+    try { test_Merkle_RightOrder_ComputesExpectedRoot(); passed++; std::cout << "[TEST PASS] Merkle_RightOrder_ComputesExpectedRoot\n"; } catch (...) { std::cout << "[TEST FAIL] Merkle_RightOrder_ComputesExpectedRoot\n"; }
+    try { test_Merkle_TamperedFile_FailsMatch(); passed++; std::cout << "[TEST PASS] Merkle_TamperedFile_FailsMatch\n"; } catch (...) { std::cout << "[TEST FAIL] Merkle_TamperedFile_FailsMatch\n"; }
+    std::cout << passed << "/2 tests passed\n";
+    return (passed == 2) ? 0 : 1;
+}

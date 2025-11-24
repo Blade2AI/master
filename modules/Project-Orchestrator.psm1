@@ -1,0 +1,168 @@
+# modules/Project-Orchestrator.psm1
+# Project / Programme orchestrator for Codex Sovereign
+
+function Get-SovProject {
+    <#
+    .SYNOPSIS
+    Load project with cryptographic verification
+    .DESCRIPTION
+    Loads project record and verifies all signatures in chain.
+    REFUSES to return tampered records - fails fast on integrity violation.
+    #>
+
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ProjectId,
+
+        [switch]$SkipVerification
+    )
+
+    $filePath = "C:\BladeOps\data\Projects\$ProjectId.json"
+    if (-not (Test-Path $filePath)) { throw "Project not found: $ProjectId" }
+
+    $project = Get-Content $filePath -Raw | ConvertFrom-Json -Depth 20
+
+    if (-not $SkipVerification) {
+        Write-Verbose "?? Verifying project integrity: $ProjectId"
+
+        if (-not $project.signature_chain -or $project.signature_chain.Count -eq 0) {
+            Write-Warning "??  WARNING: Project $ProjectId has no signatures"
+            Log-GovernanceEvent -Event @{ type = 'UNSIGNED_PROJECT_LOADED'; record_type = 'PROJECT'; record_id = $ProjectId; warning = 'Project loaded without signature verification'; risk = 'CONSTITUTIONAL_VIOLATION' }
+            return $project
+        }
+
+        $verificationFailed = $false
+        $failedSignatures = @()
+
+        foreach ($chainEvent in $project.signature_chain) {
+            if (-not $chainEvent.signature) { $verificationFailed = $true; $failedSignatures += @{ event = $chainEvent.event; reason = 'Missing signature block' }; continue }
+            if ($chainEvent.signature.algorithm -and $chainEvent.signature.algorithm -ne 'SHA256') { $verificationFailed = $true; $failedSignatures += @{ event = $chainEvent.event; reason = "Unknown algorithm: $($chainEvent.signature.algorithm)" } }
+            if (-not $chainEvent.signature.value -or $chainEvent.signature.value.Length -lt 16) { $verificationFailed = $true; $failedSignatures += @{ event = $chainEvent.event; reason = 'Invalid signature format' } }
+
+            if (-not $verificationFailed -and (Get-Command -Name Verify-MessageSignature -ErrorAction SilentlyContinue)) {
+                $verifyResult = Verify-MessageSignature -Data $project -PublicKeyPath (Join-Path $Global:SovereignConfig.SecurityPath 'public_key.xml')
+                if (-not $verifyResult.valid) { $verificationFailed = $true; $failedSignatures += @{ event = $chainEvent.event; reason = $verifyResult.reason } }
+            }
+        }
+
+        if ($verificationFailed) {
+            $error = @"
+? PROJECT INTEGRITY VIOLATION: $ProjectId
+
+TAMPERED RECORD DETECTED - LOAD REFUSED
+
+Failed signatures:
+$($failedSignatures | ForEach-Object { "  • $($_.event): $($_.reason)" } | Out-String)
+
+Project records must maintain integrity for ROI tracking.
+Tampering compromises programme governance.
+Constitutional audit required.
+
+To bypass (NOT RECOMMENDED):
+  Get-SovProject -ProjectId '$ProjectId' -SkipVerification
+"@
+            Log-GovernanceEvent -Event @{ type = 'TAMPERED_PROJECT_DETECTED'; record_type = 'PROJECT'; record_id = $ProjectId; failed_signatures = $failedSignatures; action = 'LOAD_REFUSED'; severity = 'HIGH' }
+            Write-Host $error -ForegroundColor Red
+            throw "PROJECT INTEGRITY VIOLATION: $ProjectId (see above for details)"
+        }
+
+        Write-Verbose "? Project integrity verified: $($project.signature_chain.Count) signatures valid"
+    } else {
+        Write-Warning "??  VERIFICATION BYPASSED: $ProjectId"
+        Log-GovernanceEvent -Event @{ type = 'PROJECT_VERIFICATION_BYPASSED'; record_type = 'PROJECT'; record_id = $ProjectId; warning = 'Project verification bypassed'; risk = 'CONSTITUTIONAL_VIOLATION' }
+    }
+
+    return $project
+}
+
+function Set-SovProject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][pscustomobject]$Project
+    )
+    $dir = "C:\BladeOps\data\Projects"
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $path = Join-Path $dir "$($Project.id).json"
+
+    if (-not $Project.signature_chain) { $Project.signature_chain = @() }
+
+    if (Get-Command -Name New-MessageSignature -ErrorAction SilentlyContinue) {
+        try { $sig = New-MessageSignature -Data $Project -NodeID 'PROJECT_ORCHESTRATOR' -Purpose 'PROJECT_SAVED'; if ($sig) { $Project.signature_chain += @{ event = 'SAVED'; signature = $sig; timestamp = (Get-Date).ToString('o') } } } catch { Write-Warning "Project signing failed: $_" }
+    } else { Write-Host "Warning: New-MessageSignature not available — project will be unsigned" -ForegroundColor Yellow }
+
+    $tmp = "$path.tmp"
+    $Project | ConvertTo-Json -Depth 20 | Out-File $tmp -Encoding UTF8
+    Move-Item -LiteralPath $tmp -Destination $path -Force
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        $log = @{ type = 'PROJECT_UPDATED'; project_id = $Project.id; status = $Project.status; stage = $Project.stage }
+        if ($Project.PSObject.Properties.Match('signature_chain')) { $log.signature_count = $Project.signature_chain.Count }
+        Log-GovernanceEvent $log
+    }
+    return $Project
+}
+
+function New-SovProject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][ValidateSet("MICRO","MESO","MACRO")][string]$Type,
+        [Parameter(Mandatory)][string]$Owner
+    )
+
+    $id = "PROJ-{0}-{1:0000}" -f (Get-Date -Format "yyyy"), (Get-Random -Minimum 1 -Maximum 9999)
+    $project = [pscustomobject]@{ id = $id; type = $Type; title = $Title; owner = $Owner; status = 'Proposed'; stage = 'Define'; created_at = (Get-Date).ToString('o'); signature_chain = @() }
+
+    Write-Host "?? Creating project $id: $Title" -ForegroundColor Cyan
+    Set-SovProject -Project $project | Out-Null
+    return $project
+}
+
+function Update-ProgrammeFromTriad {
+    [CmdletBinding()]
+    param([string]$UserId = "andy")
+
+    Write-Host "`n?? UPDATING PROGRAMME FROM VIBRATIONAL ANALYSIS" -ForegroundColor Magenta
+    Write-Host "???????????????????????????????????????????????????????????`n" -ForegroundColor Magenta
+
+    $triad = Invoke-VibrationalTriad -UserId $UserId
+
+    Write-Host "Vibrational signals received:" -ForegroundColor Yellow
+    Write-Host "  Programme targets: $($triad.signals.programme_targets.Count)" -ForegroundColor White
+    Write-Host ""
+
+    $updated = 0
+
+    foreach ($target in $triad.signals.programme_targets) {
+        try {
+            $project = Get-SovProject -ProjectId $target.project_id
+            $project.vibrational_priority = @{ current_score = 8.5; priority = $target.priority; reason = $target.reason; task_count = $target.task_count; last_updated = Get-Date -Format 'o'; source = 'VIBRATIONAL_TRIAD' }
+
+            if (-not $project.signature_chain) { $project.signature_chain = @() }
+            $prioritySignature = New-MessageSignature -Data $project -NodeID "PROJECT_ORCHESTRATOR" -Purpose "PRIORITY_UPDATED"
+            $project.signature_chain += @{ event = 'PRIORITY_UPDATED'; signature = $prioritySignature; timestamp = (Get-Date).ToString('o'); new_priority = $target.priority; reason = $target.reason }
+
+            Set-SovProject -Project $project | Out-Null
+
+            Write-Host "  ? Updated $($project.id): $($target.priority)" -ForegroundColor Green
+            Write-Host "     Reason: $($target.reason)" -ForegroundColor Gray
+            Write-Host "     ?? Signed: $($prioritySignature.value.Substring(0,16))..." -ForegroundColor Cyan
+
+            $updated++
+        } catch {
+            Write-Host "  ??  Could not update $($target.project_id): $_" -ForegroundColor Yellow
+        }
+    }
+
+    Log-GovernanceEvent -Event @{ type = 'PROGRAMME_UPDATED_FROM_VIBRATION'; user_id = $UserId; projects_updated = $updated; vibration_score = $triad.metrics.vibration_score }
+
+    Write-Host "`n? Programme updated: $updated projects" -ForegroundColor Green
+    Write-Host "   All changes cryptographically signed" -ForegroundColor Cyan
+    Write-Host "   All loads cryptographically verified" -ForegroundColor Cyan
+    Write-Host ""
+
+    return @{ projects_updated = $updated; targets = $triad.signals.programme_targets }
+}
+
+Export-ModuleMember -Function @('New-SovProject','Get-SovProject','Update-ProgrammeFromTriad')

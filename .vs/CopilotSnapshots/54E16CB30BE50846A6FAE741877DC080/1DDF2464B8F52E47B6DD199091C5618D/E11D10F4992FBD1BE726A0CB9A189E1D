@@ -1,0 +1,62 @@
+﻿import json
+import os
+import hashlib
+from core.config import CONFIG
+from core.governance import Proposal, BoardroomDecision, ConstitutionalViolation
+
+class Boardroom:
+    def __init__(self):
+        self.last_hash = "GENESIS_HASH_0000000000000000"
+        self._recover_state()
+
+    def _recover_state(self):
+        if os.path.exists(CONFIG.STATE_PATH):
+            with open(CONFIG.STATE_PATH, 'r') as f:
+                data = json.load(f)
+                self.last_hash = data.get("last_hash", self.last_hash)
+
+    def evaluate(self, proposal: Proposal, trial_result: dict) -> BoardroomDecision:
+        if proposal.estimated_cost > CONFIG.GLOBAL_MAX_DAILY_COST:
+            violation = ConstitutionalViolation(
+                "COST_OVERRUN",
+                "BLOCK",
+                f"Cost {proposal.estimated_cost} > {CONFIG.GLOBAL_MAX_DAILY_COST}"
+            )
+            return self._record(BoardroomDecision(
+                proposal.id,
+                False,
+                "REJECTED",
+                violation,
+                "Budget Exceeded"
+            ))
+
+        if trial_result.get("success"):
+            return self._record(BoardroomDecision(
+                proposal.id,
+                True,
+                "AUTO_APPROVE",
+                reasoning="Trial Passed"
+            ))
+        return self._record(BoardroomDecision(
+            proposal.id,
+            False,
+            "REJECTED",
+            reasoning="Trial Failed"
+        ))
+
+    def _record(self, decision: BoardroomDecision):
+        entry = {
+            "prev_hash": self.last_hash,
+            "decision": decision.__dict__,
+            "timestamp": decision.timestamp
+        }
+        payload_str = json.dumps(entry, sort_keys=True, default=str)
+        new_hash = hashlib.sha256(payload_str.encode()).hexdigest()
+        entry["hash"] = new_hash
+        os.makedirs(os.path.dirname(CONFIG.LEDGER_PATH), exist_ok=True)
+        with open(CONFIG.LEDGER_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+        self.last_hash = new_hash
+        with open(CONFIG.STATE_PATH, "w") as f:
+            json.dump({"last_hash": new_hash}, f)
+        return decision

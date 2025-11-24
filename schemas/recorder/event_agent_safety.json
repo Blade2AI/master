@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "event_agent_safety",
+  "type": "object",
+  "required": ["event_type", "event_id", "timestamp", "payload"],
+  "properties": {
+    "event_type": { "const": "event_agent_safety" },
+    "event_id": { "type": "string", "minLength": 8 },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" },
+    "schema_version": { "type": ["string", "null"] },
+    "node_id": { "type": ["string", "null"] },
+    "payload": {
+      "type": "object",
+      "required": ["actor_id", "safety_level", "created_utc"],
+      "properties": {
+        "actor_id": { "type": "string", "minLength": 3 },
+        "safety_level": { "type": "string", "enum": ["safe", "warning", "critical"] },
+        "created_utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

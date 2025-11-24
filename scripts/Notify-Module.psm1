@@ -1,0 +1,22 @@
+function Send-TeamsNotification {
+  param(
+    [Parameter(Mandatory)] [string]$WebhookUrl,
+    [Parameter(Mandatory)] [string]$Title,
+    [Parameter(Mandatory)] [string]$Text,
+    [ValidateSet('Info','Warn','Error')] [string]$Level='Info'
+  )
+  $color = switch ($Level) { 'Error' {'ff0000'} 'Warn' {'ffff00'} default {'36a64f'} }
+  $payload = @{ title=$Title; text=$Text; themeColor=$color }
+  try { Invoke-RestMethod -Method Post -Uri $WebhookUrl -Body ($payload | ConvertTo-Json) -ContentType 'application/json' } catch {}
+}
+
+function Send-SlackNotification {
+  param(
+    [Parameter(Mandatory)] [string]$WebhookUrl,
+    [Parameter(Mandatory)] [string]$Text
+  )
+  $payload = @{ text=$Text }
+  try { Invoke-RestMethod -Method Post -Uri $WebhookUrl -Body ($payload | ConvertTo-Json) -ContentType 'application/json' } catch {}
+}
+
+Export-ModuleMember -Function Send-TeamsNotification,Send-SlackNotification

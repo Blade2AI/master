@@ -1,0 +1,7 @@
+﻿# 🛡️ Sovereign Stack Status
+[![Continuous Assurance Status](https://github.com/PrecisePointway/master/actions/workflows/continuous-assurance.yml/badge.svg)](https://github.com/PrecisePointway/master/actions/workflows/continuous-assurance.yml)
+
+Cryptographic ledger integrity is continuously verified (hash + rogue file check) via scheduled CI. Any drift invalidates the build.
+
+# master
+Project management file

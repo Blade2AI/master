@@ -1,0 +1,37 @@
+{
+  "target_root": "E:/SOVEREIGN_CRITICAL",
+  "nodes": [
+    {"name": "PC4", "root_paths": ["\\PC4\\Users", "\\PC4\\Data"], "enabled": true},
+    {"name": "PC5", "root_paths": ["C:/Users", "D:/"], "enabled": true},
+    {"name": "NAS", "root_paths": ["\\NAS\\Archive", "Z:/"], "enabled": true}
+  ],
+  "include_extensions": [
+    ".txt", ".md", ".rtf", ".doc", ".docx", ".odt",
+    ".pdf",
+    ".xls", ".xlsx", ".ods", ".csv",
+    ".ppt", ".pptx", ".odp",
+    ".html", ".json", ".xml", ".eml"
+  ],
+  "exclude_dirs": [
+    ".git", ".hg", ".svn", ".vscode", "node_modules",
+    "bin", "obj", "dist", "build", "__pycache__",
+    "System Volume Information", "$Recycle.Bin", "WindowsImageBackup"
+  ],
+  "identifier_patterns": ["Andy Jones", "Sovereign", "Boardroom-13", "Blade"],
+  "ai_markers": ["lm studio", "ollama", "cursor", "vscode", "chatgpt", "openai"],
+  "oem_publishers": ["Microsoft Corporation", "Dell Inc.", "HP", "Lenovo"],
+  "max_file_size_mb": 10240,
+  "oversize_app_folder_mb": 10240,
+  "hashing": {
+    "enabled": true,
+    "algorithm": "SHA256",
+    "dedupe_enabled": true,
+    "always_copy_duplicates": false,
+    "max_hash_file_size_mb": 20480
+  },
+  "copy_performance": {
+    "parallelism_enabled": false,
+    "max_parallel_copies": 4,
+    "max_mb_per_second": 0
+  }
+}

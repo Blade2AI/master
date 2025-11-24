@@ -1,0 +1,130 @@
+﻿# modules/Project-Orchestrator.psm1
+# Project / Programme orchestrator for Codex Sovereign
+
+function Get-SovProject {
+    [CmdletBinding()]
+    param(
+        [string]$Id
+    )
+    $dir = "C:\BladeOps\Projects"
+    $path = Join-Path $dir "$Id.json"
+    if (-not (Test-Path $path)) {
+        throw "Project $Id not found at $path"
+    }
+    Get-Content $path -Raw | ConvertFrom-Json
+}
+
+function Set-SovProject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][pscustomobject]$Project
+    )
+    $dir = "C:\BladeOps\Projects"
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $path = Join-Path $dir "$($Project.id).json"
+    $Project | ConvertTo-Json -Depth 10 | Out-File $path -Encoding UTF8
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        Log-GovernanceEvent @{
+            type = "PROJECT_UPDATED"
+            project_id = $Project.id
+            status = $Project.status
+            stage = $Project.stage
+        }
+    }
+    return $Project
+}
+
+function New-SovProject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][ValidateSet("MICRO","MESO","MACRO")][string]$Type,
+        [Parameter(Mandatory)][string]$Owner
+    )
+
+    $id = "PROJ-{0}-{1:0000}" -f (Get-Date -Format "yyyy"), (Get-Random -Minimum 1 -Maximum 9999)
+    $project = [pscustomobject]@{
+        id = $id
+        type = $Type
+        title = $Title
+        owner = $Owner
+        status = "Proposed"
+        stage  = "Define"
+        created_at = (Get-Date).ToString("o")
+        backlog = @{ items = @() }
+        gates   = @()
+        roi = @{
+            expected_savings_year1 = 0
+            expected_savings_year3 = 0
+            capex = 0
+            confirmed_savings = 0
+        }
+        priority = 'MEDIUM'
+    }
+
+    Write-Host "🧩 Creating project $id: $Title" -ForegroundColor Cyan
+    Set-SovProject -Project $project | Out-Null
+    return $project
+}
+
+function Update-SovProjectStatus {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Id,
+        [Parameter(Mandatory)][ValidateSet("Proposed","Approved","InProgress","Paused","Completed","Terminated")][string]$Status,
+        [string]$Stage
+    )
+    $proj = Get-SovProject -Id $Id
+    $proj.status = $Status
+    if ($Stage) { $proj.stage = $Stage }
+    Set-SovProject -Project $proj | Out-Null
+    Write-Host "✅ Project $Id → $Status ($Stage)" -ForegroundColor Green
+    return $proj
+}
+
+function Set-ProjectPriority {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ProjectId,
+        [Parameter(Mandatory)][ValidateSet('LOW','MEDIUM','HIGH')][string]$Priority,
+        [string]$Reason
+    )
+    try {
+        $proj = Get-SovProject -Id $ProjectId
+        $proj.priority = $Priority
+        if (-not $proj.history) { $proj.history = @() }
+        $proj.history += @{ time=(Get-Date).ToString('o'); action='PRIORITY_SET'; priority=$Priority; reason=$Reason }
+        Set-SovProject -Project $proj | Out-Null
+        Write-StepInfo "Project $ProjectId priority set to $Priority ($Reason)"
+        return $proj
+    } catch {
+        Write-StepError "Failed to set project priority: $_"
+        return $null
+    }
+}
+
+function Update-ProgrammeFromTriad {
+    [CmdletBinding()]
+    param(
+        [string]$UserId = "andy"
+    )
+
+    if (-not (Get-Command -Name Invoke-VibrationalTriad -ErrorAction SilentlyContinue)) {
+        Write-StepWarning "Vibrational triad not available"
+        return
+    }
+
+    try {
+        $triad = Invoke-VibrationalTriad -UserId $UserId
+        foreach ($target in $triad.signals.programme_targets) {
+            if ($target.project_id) {
+                Set-ProjectPriority -ProjectId $target.project_id -Priority $target.priority -Reason $target.reason
+            }
+        }
+    } catch {
+        Write-StepError "Update-ProgrammeFromTriad failed: $_"
+    }
+}
+
+Export-ModuleMember -Function *

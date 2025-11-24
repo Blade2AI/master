@@ -1,0 +1,71 @@
+﻿# modules/Meeting-Engine.psm1
+# Minimal Meeting Engine: builds meeting records from spec and writes to disk
+
+function Invoke-SovMeeting {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Type,
+        [Parameter(Mandatory)][hashtable]$Context
+    )
+
+    $dir = "C:\BladeOps\Meetings"
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
+    $meetingId = "MEET-{0}-{1:0000}" -f (Get-Date -Format "yyyyMMddHHmmss"), (Get-Random -Minimum 1 -Maximum 9999)
+    $meeting = [pscustomobject]@{
+        meeting_id = $meetingId
+        type = $Type
+        context = $Context
+        participants = @()
+        decisions = @()
+        actions = @()
+        created_at = (Get-Date).ToString('o')
+    }
+
+    $outPath = Join-Path $dir ("$meetingId.json")
+    $meeting | ConvertTo-Json -Depth 10 | Out-File $outPath -Encoding UTF8
+
+    if (Get-Command -Name Log-GovernanceEvent -ErrorAction SilentlyContinue) {
+        Log-GovernanceEvent @{ type = 'MEETING_HELD'; message = "Meeting $meetingId of type $Type held"; meeting_id = $meetingId }
+    }
+
+    return $meeting
+}
+
+function New-SovDailyStandup {
+    [CmdletBinding()]
+    param(
+        [string]$Team = "DEFAULT",
+        [string]$UserId = "andy"
+    )
+
+    # Attempt to gather vibrational context
+    $triad = $null
+    if (Get-Command -Name Invoke-VibrationalTriad -ErrorAction SilentlyContinue) {
+        try {
+            $triad = Invoke-VibrationalTriad -UserId $UserId
+        } catch {
+            Write-StepWarning "Invoke-VibrationalTriad failed: $_"
+        }
+    }
+
+    $context = [ordered]@{
+        team = $Team
+        created_at = (Get-Date).ToString('o')
+    }
+
+    if ($triad) {
+        $context.vibration_map = $triad.metrics
+        $context.high_queue = $triad.high_queue
+        $context.neutral_queue = $triad.neutral_queue
+        $context.low_queue = $triad.low_queue
+        $context.meeting_seeds = $triad.signals.meeting_seeds
+    } else {
+        $context.note = "No vibrational data available"
+    }
+
+    $meeting = Invoke-SovMeeting -Type "DAILY_CELL_STANDUP" -Context $context
+    return $meeting
+}
+
+Export-ModuleMember -Function *

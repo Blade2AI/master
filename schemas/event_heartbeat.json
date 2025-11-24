@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/event_heartbeat.json",
+  "title": "Heartbeat Event",
+  "type": "object",
+  "required": ["event_type", "timestamp", "node", "merkle_root", "version"],
+  "properties": {
+    "event_type": {"const": "heartbeat"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "node": {"type": "string"},
+    "role": {"type": "string"},
+    "merkle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "digests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "version": {"type": "string"}
+  }
+}

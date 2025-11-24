@@ -1,0 +1,105 @@
+﻿powershell
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$ManifestFile,
+    [Parameter(Mandatory=$true)][string]$DestRoot,
+    [string]$Branch,
+    [switch]$PullIfExists,
+    [switch]$SkipExisting,
+    [switch]$ForceReclone
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function New-Dir([string]$Path) { if (-not [string]::IsNullOrWhiteSpace($Path)) { New-Item -ItemType Directory -Force -Path $Path | Out-Null } }
+function Write-Info([string]$Msg){ Write-Host "[INFO] $Msg" -ForegroundColor Cyan }
+function Write-Warn([string]$Msg){ Write-Host "[WARN] $Msg" -ForegroundColor Yellow }
+function Write-Err ([string]$Msg){ Write-Host "[FAIL] $Msg" -ForegroundColor Red }
+
+$ws = (Split-Path -Parent $PSScriptRoot)
+$logRoot = Join-Path $ws 'Data/git_clone'
+New-Dir $logRoot
+$ts = Get-Date -Format 'yyyyMMdd_HHmmss'
+$logPath = Join-Path $logRoot "clone_$ts.log"
+$summaryPath = Join-Path $logRoot "summary_$ts.json"
+
+function Log($line){ Add-Content -LiteralPath $logPath -Value ("[" + (Get-Date -Format o) + "] " + $line) }
+
+if (-not (Test-Path -LiteralPath $ManifestFile)) { throw "Manifest not found: $ManifestFile" }
+New-Dir $DestRoot
+
+$entries = @()
+Get-Content -LiteralPath $ManifestFile | ForEach-Object {
+    $raw = $_.Trim()
+    if ($raw -and -not $raw.StartsWith('#')) {
+        $parts = $raw -split '\s+'
+        $url = $parts[0]
+        $subdir = if ($parts.Count -gt 1) { $parts[1] } else { $null }
+        $entries += [pscustomobject]@{ url=$url; subdir=$subdir }
+    }
+}
+
+if ($entries.Count -eq 0) { Write-Warn "No repositories listed in manifest."; return }
+
+$results = @()
+foreach ($e in $entries) {
+    $repoName = $null
+    $dest = $null
+    try {
+        $repoName = if ($e.subdir) { $e.subdir } else { [io.path]::GetFileNameWithoutExtension(($e.url -replace '.*/','')) }
+        $dest = Join-Path $DestRoot $repoName
+        $gitDir = Join-Path $dest '.git'
+        $destExists = Test-Path -LiteralPath $dest
+        $isGit = Test-Path -LiteralPath $gitDir
+
+        if ($isGit) {
+            if ($PullIfExists) {
+                Write-Info "Updating $repoName in $dest"
+                Log "FETCH $dest"
+                & git -C $dest fetch --all --tags 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "git fetch failed with exit code $LASTEXITCODE" }
+                if ($Branch) { & git -C $dest checkout $Branch 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null; if ($LASTEXITCODE -ne 0) { throw "git checkout $Branch failed with exit code $LASTEXITCODE" } }
+                & git -C $dest pull 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "git pull failed with exit code $LASTEXITCODE" }
+                $results += [pscustomobject]@{ name=$repoName; action='updated'; path=$dest; ok=$true }
+            } elseif ($SkipExisting) {
+                Write-Warn "Skipping existing repo: $repoName"
+                $results += [pscustomobject]@{ name=$repoName; action='skipped'; path=$dest; ok=$true }
+            } else {
+                throw "Destination exists and is a git repo. Use -PullIfExists or -SkipExisting. Path: $dest"
+            }
+        }
+        elseif ($destExists -and -not $isGit) {
+            if ($ForceReclone) {
+                Write-Warn "Destination exists but is not a git repo. Removing: $dest"
+                Log "REMOVE $dest"
+                Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction Stop
+                New-Dir $DestRoot
+                Write-Info "Cloning $($e.url) -> $dest"
+                Log "CLONE $($e.url) -> $dest"
+                & git clone $e.url $dest 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "git clone failed with exit code $LASTEXITCODE" }
+                if ($Branch) { & git -C $dest checkout $Branch 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null; if ($LASTEXITCODE -ne 0) { throw "git checkout $Branch failed with exit code $LASTEXITCODE" } }
+                $results += [pscustomobject]@{ name=$repoName; action='recloned'; path=$dest; ok=$true }
+            } else {
+                throw "Destination exists and is not an empty git repo. Use -ForceReclone to delete and re-clone. Path: $dest"
+            }
+        }
+        else {
+            Write-Info "Cloning $($e.url) -> $dest"
+            Log "CLONE $($e.url) -> $dest"
+            & git clone $e.url $dest 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "git clone failed with exit code $LASTEXITCODE" }
+            if ($Branch) { & git -C $dest checkout $Branch 2>&1 | Tee-Object -FilePath $logPath -Append | Out-Null; if ($LASTEXITCODE -ne 0) { throw "git checkout $Branch failed with exit code $LASTEXITCODE" } }
+            $results += [pscustomobject]@{ name=$repoName; action='cloned'; path=$dest; ok=$true }
+        }
+    } catch {
+        Write-Err $_.Exception.Message
+        Log ("ERROR: " + $_.Exception.Message)
+        $results += [pscustomobject]@{ name=$repoName; action='error'; path=$dest; ok=$false; error=$_.Exception.Message }
+    }
+}
+
+($results | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $summaryPath -Encoding UTF8
+Write-Info "Clone completed. Summary: $summaryPath; Log: $logPath"

@@ -1,0 +1,53 @@
+﻿"""Sign an anchor JSON file using an Ed25519 private key.
+
+Requirements:
+  pip install cryptography
+
+Environment:
+  ANCHOR_SIGNING_KEY_PATH -> path to PEM private key (passwordless)
+"""
+import argparse
+import base64
+import json
+import os
+from pathlib import Path
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+def load_anchor(path: Path) -> dict:
+    with path.open('r', encoding='utf-8') as f:
+        return json.load(f)
+
+def save_anchor(path: Path, data: dict) -> None:
+    tmp = path.with_suffix(path.suffix + '.tmp')
+    with tmp.open('w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+    tmp.replace(path)
+
+def load_private_key(path: Path) -> ed25519.Ed25519PrivateKey:
+    with path.open('rb') as f:
+        return serialization.load_pem_private_key(f.read(), password=None)
+
+def main():
+    parser = argparse.ArgumentParser(description='Sign anchor JSON.')
+    parser.add_argument('--anchor', required=True, type=Path)
+    args = parser.parse_args()
+
+    key_path = os.environ.get('ANCHOR_SIGNING_KEY_PATH')
+    if not key_path:
+        raise SystemExit('ANCHOR_SIGNING_KEY_PATH env var not set.')
+    priv = load_private_key(Path(key_path))
+    anchor = load_anchor(args.anchor)
+
+    canonical = json.dumps(anchor, separators=(',', ':'), sort_keys=True).encode('utf-8')
+    signature = priv.sign(canonical)
+    sig_b64 = base64.b64encode(signature).decode('ascii')
+
+    anchor.setdefault('signature', {})
+    anchor['signature']['value'] = sig_b64
+
+    save_anchor(args.anchor, anchor)
+    print('Anchor signed OK.')
+
+if __name__ == '__main__':
+    main()

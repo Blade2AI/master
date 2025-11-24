@@ -1,0 +1,27 @@
+﻿param (
+    [Parameter(Mandatory=$true)][string]$EventType,
+    [Parameter(Mandatory=$true)][hashtable]$Payload,
+    [string]$ConfigPath = 'config/recorder_config.yaml'
+)
+$ErrorActionPreference = 'Stop'
+if (-not (Test-Path $ConfigPath)) { throw "Recorder config not found: $ConfigPath" }
+
+# Require PowerShell 7 for ConvertFrom-Yaml; if unavailable, fallback simple parser
+try { $config = Get-Content $ConfigPath -Raw | ConvertFrom-Yaml } catch { throw "YAML parsing failed. Ensure PowerShell 7 and Import-Module powershell-yaml if needed." }
+
+$event = [ordered]@{
+    event_id = [guid]::NewGuid().ToString()
+    event_type = $EventType
+    schema_version = $config.schema_version
+    node_id = $config.node_id
+    timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    payload = $Payload
+}
+
+$ledger = $config.ledger_path
+$dir = Split-Path -Parent $ledger
+if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+
+$jsonLine = $event | ConvertTo-Json -Depth 10 -Compress
+Add-Content -LiteralPath $ledger -Value $jsonLine -Encoding utf8
+Write-Host "[RECORDER] Event logged: $EventType id=$($event.event_id)" -ForegroundColor Cyan

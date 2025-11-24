@@ -1,0 +1,59 @@
+﻿param(
+  [string[]]$Hosts,
+  [ValidateSet('deploy','run','sync','ps','ollama')]$Type='run',
+  [string]$QueueRoot = "\\dxp4800plus-67ba\ops\Queue",
+  [string]$Package = '',
+  [string]$Dest = 'C:\\ops',
+  [string]$Script = '',
+  [string[]]$Args,
+  [string]$Code,
+  [string]$Prompt,
+  [string]$Model = 'llama3.2:3b',
+  [string]$Output = ''
+)
+
+if (-not $Hosts -or $Hosts.Count -eq 0) { throw 'Specify -Hosts list' }
+
+# Auto-switch to ps if -Code was provided
+if ($Code) { $Type = 'ps' }
+# Auto-switch to ollama if -Prompt was provided
+if ($Prompt) { $Type = 'ollama' }
+
+$cmd = [ordered]@{ id=[guid]::NewGuid().ToString(); type=$Type }
+
+switch ($Type) {
+  'deploy' { 
+    $cmd.package = $Package
+    $cmd.dest = $Dest 
+  }
+  'sync' { 
+    $cmd.source = $Package
+    $cmd.dest = $Dest 
+  }
+  'ps' { 
+    $cmd.code = $Code 
+  }
+  'ollama' {
+    $cmd.prompt = $Prompt
+    $cmd.model = $Model
+    if ($Output) { $cmd.output = $Output }
+  }
+  default { 
+    $cmd.script = $Script
+    if ($Args) { $cmd.args = $Args }
+  }
+}
+
+foreach ($h in $Hosts) {
+  $dir = Join-Path $QueueRoot ($h.ToLower())
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $file = Join-Path $dir ("command_" + $cmd.id + ".json")
+  ($cmd | ConvertTo-Json -Depth 8) | Set-Content -Encoding UTF8 $file
+  Write-Host "Queued $($cmd.type) for $h (id=$($cmd.id)) -> $file"
+}
+
+# Show usage examples for new Ollama functionality
+if ($Type -eq 'ollama') {
+  Write-Host "`nOllama command queued. Monitor with:"
+  Write-Host "  Get-Content \\dxp4800plus-67ba\ops\Queue\$($Hosts[0])\*.done.json | ConvertFrom-Json | Select-Object -Last 1"
+}

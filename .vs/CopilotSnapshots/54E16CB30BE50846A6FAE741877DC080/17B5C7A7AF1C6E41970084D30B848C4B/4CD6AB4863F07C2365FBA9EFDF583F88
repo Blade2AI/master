@@ -1,0 +1,149 @@
+﻿import os
+import json
+import time
+import hashlib
+import logging
+import shutil
+from pathlib import Path
+from typing import Dict, Optional, Tuple, Any
+from dataclasses import dataclass
+
+# --- CONFIGURATION & EXTENSIBILITY ---
+# Add new agents here. The Router uses this to enforce directory isolation.
+AGENT_CONFIG = {
+    "evidence": {
+        "root": "/data/evidence",
+        "dirs": {"draft": "Analysis/_drafts", "prod": "Analysis/_verified"},
+        "thresholds": {"confidence": 0.95, "max_cost": 2.0}
+    },
+    "property": {
+        "root": "/data/property",
+        "dirs": {"draft": "Scored/_drafts", "prod": "Scored/_production"},
+        "thresholds": {"confidence": 0.90, "max_cost": 1.0}
+    }
+}
+
+# Circuit Breakers
+MAX_FILE_SIZE_MB = 10
+GLOBAL_COST_LIMIT_DAILY = 50.0
+
+@dataclass
+class RouterResponse:
+    path: str
+    status: str
+    audit_hash: str
+
+class SovereignLedger:
+    """
+    Implements cryptographic append-only logging with hash chaining.
+    Ensures the audit trail cannot be tampered with without breaking the chain.
+    """
+    def __init__(self, log_path: Path):
+        self.log_path = log_path
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _get_last_hash(self) -> str:
+        if not self.log_path.exists():
+            return "0" * 64  # Genesis Hash
+
+        try:
+            with open(self.log_path, 'r') as f:
+                lines = f.readlines()
+                if not lines:
+                    return "0" * 64
+                last_entry = json.loads(lines[-1])
+                return last_entry.get("hash", "0" * 64)
+        except Exception:
+            return "ERROR_READING_HASH"
+
+    def log_event(self, event_type: str, agent: str, data: dict) -> str:
+        prev_hash = self._get_last_hash()
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        payload = {
+            "timestamp": timestamp,
+            "event": event_type,
+            "agent": agent,
+            "data": data,
+            "prev_hash": prev_hash
+        }
+
+        payload_str = json.dumps(payload, sort_keys=True)
+        current_hash = hashlib.sha256(payload_str.encode()).hexdigest()
+        payload["hash"] = current_hash
+
+        with open(self.log_path, "a") as f:
+            f.write(json.dumps(payload) + "\n")
+
+        return current_hash
+
+class SovereignRouter:
+    def __init__(self, agent_name: str):
+        if agent_name not in AGENT_CONFIG:
+            raise ValueError(f"Unknown agent: {agent_name}. Update AGENT_CONFIG in router.py")
+
+        self.agent_name = agent_name
+        self.config = AGENT_CONFIG[agent_name]
+
+        self.track = os.getenv("TRACK", "insider").lower()  # 'insider' or 'stable'
+        self.write_mode = os.getenv("WRITE_MODE", "draft").lower()
+
+        self.root = Path(self.config["root"])
+        self.ledger = SovereignLedger(Path("Governance/Logs/audit_chain.jsonl"))
+
+        self.daily_cost_accumulated = 0.0  # Replace with real cost tracker
+
+    def _check_circuit_breakers(self, content_size_mb: float, estimated_cost: float):
+        if content_size_mb > MAX_FILE_SIZE_MB:
+            raise RuntimeError(f"circuit_breaker: Input size {content_size_mb}MB exceeds limit.")
+        if estimated_cost > self.config["thresholds"]["max_cost"]:
+            raise RuntimeError(f"circuit_breaker: Est cost ${estimated_cost} exceeds run limit.")
+        if self.daily_cost_accumulated + estimated_cost > GLOBAL_COST_LIMIT_DAILY:
+            raise RuntimeError("circuit_breaker: Daily budget exhausted.")
+
+    def _atomic_write(self, target_path: Path, data: dict):
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = target_path.with_suffix('.tmp')
+        with open(temp_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.replace(temp_path, target_path)
+
+    def process(self, filename: str, data: dict, confidence: float, estimated_cost: float = 0.0) -> RouterResponse:
+        content_size = len(json.dumps(data)) / (1024 * 1024)
+        self._check_circuit_breakers(content_size, estimated_cost)
+
+        destination = "draft"
+        target_subfolder = self.config["dirs"]["draft"]
+
+        if self.track == "stable":
+            threshold = self.config["thresholds"]["confidence"]
+            if confidence >= threshold:
+                destination = "prod"
+                target_subfolder = self.config["dirs"]["prod"]
+            else:
+                destination = "draft_fallback"
+
+        data["_governance"] = {
+            "track": self.track,
+            "agent": self.agent_name,
+            "confidence": confidence,
+            "threshold": self.config["thresholds"]["confidence"],
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        }
+
+        safe_filename = Path(filename).name
+        final_path = self.root / target_subfolder / safe_filename
+        self._atomic_write(final_path, data)
+
+        audit_hash = self.ledger.log_event(
+            event_type="WRITE_SUCCESS",
+            agent=self.agent_name,
+            data={
+                "file": str(final_path),
+                "dest": destination,
+                "cost": estimated_cost,
+                "conf": confidence
+            }
+        )
+
+        return RouterResponse(path=str(final_path), status=destination, audit_hash=audit_hash)

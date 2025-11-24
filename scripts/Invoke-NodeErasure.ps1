@@ -1,0 +1,52 @@
+param (
+  [string]$NodeId,
+  [string]$RequestId = "GDPR-$(Get-Date -Format yyyyMMdd-HHmmss)",
+  [switch]$DryRun,
+  [string]$AnchorsDir = 'out/anchors'
+)
+$ErrorActionPreference='Stop'
+
+# Load last permanent anchor state
+$statePath = 'state/permanent_anchor.json'
+if(-not (Test-Path $statePath)){ throw "Permanent anchor state not found: $statePath" }
+$state = Get-Content $statePath -Raw | ConvertFrom-Json
+
+$prevArweave = $state.arweave_txid
+$prevIpfs    = $state.ipfs_cid
+if(-not $prevArweave -or -not $prevIpfs){ throw 'State missing previous TXID/CID' }
+
+$zeroRoot = '0' * 128
+$payloadLines = @(
+  $zeroRoot,
+  (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'),
+  $NodeId,
+  'sovereign-fr-v6.0-erasure',
+  $prevArweave,
+  $prevIpfs
+)
+$payloadBlock = $payloadLines -join "`n"
+
+if($DryRun){ Write-Host '[DRY] Zero-root payload prepared (not published).'; Write-Host $payloadBlock; return }
+
+# Publish dual anchor (expects Seal-And-Anchor-Dual.ps1 to accept -Payload6Lines)
+$sealScript = 'scripts/Seal-And-Anchor-Dual.ps1'
+if(-not (Test-Path $sealScript)){ throw "Seal script not found: $sealScript" }
+& $sealScript -Payload6Lines $payloadBlock
+
+# Emit erasure event via recorder
+& scripts/Write-Event.ps1 -EventType 'erasure_commit' -Payload @{ request_id=$RequestId; node_id=$NodeId; previous_arweave=$prevArweave; previous_ipfs=$prevIpfs; zero_root=$zeroRoot; timestamp=(Get-Date).ToUniversalTime().ToString('o') }
+
+# Remove pseudonymization salt if present
+$saltFile = "state/salt_$NodeId.key"
+if(Test-Path $saltFile){ Remove-Item -LiteralPath $saltFile -Force -ErrorAction SilentlyContinue }
+
+Write-Host '[ERASURE] Zero-root published; state salt removed.' -ForegroundColor Cyan
+
+# Invoke local chain verifier (optional audit proof)
+$verifyScript = 'scripts/verify_chain.py'
+if(Test-Path $verifyScript){
+  try {
+    Write-Host '[AUDIT] Running local chain verifier after erasure…' -ForegroundColor Cyan
+    python $verifyScript $AnchorsDir
+  } catch { Write-Host "[WARN] Chain verifier failed: $_" -ForegroundColor Yellow }
+} else { Write-Host '[WARN] Chain verifier script missing – skipped.' -ForegroundColor Yellow }

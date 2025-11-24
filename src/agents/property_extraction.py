@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 import re
 
 def extract_price(text: str):
-    clean = text.replace(",", "").replace("£", "").replace("$", "").lower()
-    pattern = r"(\d{2,9})(?:\s*[-–]\s*(\d{2,9}))?"
+    clean = text.replace(",", "").replace("Â£", "").replace("$", "").lower()
+    pattern = r"(\d{2,9})(?:\s*[-ï¿½]\s*(\d{2,9}))?"
     m = re.search(pattern, clean)
     if not m:
         return None

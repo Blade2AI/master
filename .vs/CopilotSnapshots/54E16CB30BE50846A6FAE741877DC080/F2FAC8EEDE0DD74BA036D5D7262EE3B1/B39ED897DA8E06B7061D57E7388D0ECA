@@ -1,0 +1,99 @@
+﻿<#!
+.SYNOPSIS
+  Perform real (or dry-run) network anchoring of an anchor payload to Arweave (via Bundlr CLI) and IPFS (via nft.storage).
+.DESCRIPTION
+  Requires environment variables:
+    NFT_STORAGE_API_KEY  -> for IPFS upload
+    (optional) BUNDLR_KEY / Bundlr wallet already configured for bundlr CLI
+  This script is defensive: if required tooling or keys are absent it exits with a neutral status and leaves JSON unchanged.
+.PARAMETER AnchorJsonPath
+  Path to the GDPR-safe anchor JSON (event_anchor_*.json)
+.PARAMETER AnchorTxtPath
+  Path to the 6-line text anchor (.anchor.txt) used for dual upload
+.PARAMETER StateDir
+  Directory holding state/permanent_anchor.json
+.PARAMETER DryRun
+  If set, simulate uploads without hitting networks.
+#>
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory=$true)][string]$AnchorJsonPath,
+  [Parameter(Mandatory=$true)][string]$AnchorTxtPath,
+  [string]$StateDir='state',
+  [switch]$DryRun
+)
+$ErrorActionPreference='Stop'
+if(-not (Test-Path $AnchorJsonPath)){ throw "Anchor JSON not found: $AnchorJsonPath" }
+if(-not (Test-Path $AnchorTxtPath)){ throw "Anchor text not found: $AnchorTxtPath" }
+if(-not (Test-Path $StateDir)){ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null }
+
+Write-Host '== Perform-NetworkAnchoring ==' -ForegroundColor Cyan
+if($DryRun){ Write-Host '[MODE] DRY-RUN: No network calls will be made.' -ForegroundColor Yellow }
+
+$anchorObj = Get-Content $AnchorJsonPath -Raw | ConvertFrom-Json
+$payload = Get-Content $AnchorTxtPath -Raw -Encoding UTF8
+
+# -------- IPFS (nft.storage) --------
+$cid = $null
+$ipfsProvider = 'nft.storage'
+$apiKey = $env:NFT_STORAGE_API_KEY
+if($apiKey -and -not $DryRun){
+  try {
+    Write-Host '[IPFS] Uploading to nft.storage...' -ForegroundColor DarkCyan
+    $resp = Invoke-WebRequest -Uri 'https://api.nft.storage/upload' -Method POST -Headers @{ Authorization = "Bearer $apiKey" } -InFile $AnchorTxtPath -ContentType 'text/plain'
+    $json = $resp.Content | ConvertFrom-Json
+    if($json.value.cid){ $cid = $json.value.cid; Write-Host "[IPFS] CID: $cid" -ForegroundColor Green } else { Write-Host '[IPFS] Unexpected response format.' -ForegroundColor Yellow }
+  } catch { Write-Host "[IPFS] Upload failed: $_" -ForegroundColor Red }
+} else {
+  Write-Host '[IPFS] Skipped (missing NFT_STORAGE_API_KEY or dry-run).' -ForegroundColor Yellow
+}
+
+# -------- Arweave (Bundlr CLI) --------
+$txId = $null
+$bundlr = Get-Command bundlr -ErrorAction SilentlyContinue
+if($bundlr -and -not $DryRun){
+  try {
+    Write-Host '[ARWEAVE] Uploading via bundlr CLI...' -ForegroundColor DarkCyan
+    # bundlr upload <file> --tags Content-Type:text/plain
+    $out = & $bundlr.Path upload $AnchorTxtPath --tags "Content-Type:text/plain" 2>&1
+    $outText = ($out | Out-String).Trim()
+    $txIdMatch = [regex]::Match($outText,'[A-Za-z0-9_-]{43,100}')
+    if($txIdMatch.Success){ $txId = $txIdMatch.Value; Write-Host "[ARWEAVE] TXID: $txId" -ForegroundColor Green } else { Write-Host '[ARWEAVE] Could not parse transaction id.' -ForegroundColor Yellow }
+  } catch { Write-Host "[ARWEAVE] Upload failed: $_" -ForegroundColor Red }
+} else {
+  Write-Host '[ARWEAVE] Skipped (bundlr CLI missing or dry-run).' -ForegroundColor Yellow
+}
+
+# -------- Update anchor JSON --------
+$changed=$false
+if($cid){ $anchorObj.backends.ipfs.cid = $cid; $anchorObj.backends.ipfs.provider = $ipfsProvider; $changed=$true }
+if($txId){ $anchorObj.backends.arweave.tx_id = $txId; $anchorObj.backends.arweave.bundlr_node = $env:BUNDLR_NODE; $changed=$true }
+if($changed){
+  $anchorObj.signature.value = $null  # placeholder; signing comes later
+  $anchorObj | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $AnchorJsonPath -Encoding UTF8
+  Write-Host '[UPDATE] Anchor JSON updated with network receipts.' -ForegroundColor Green
+} else {
+  Write-Host '[UPDATE] Anchor JSON unchanged (no receipts).' -ForegroundColor Yellow
+}
+
+# -------- State update --------
+if($txId -or $cid){
+  $stateFile = Join-Path $StateDir 'permanent_anchor.json'
+  $stateObj = [ordered]@{
+    arweave_txid = if($txId){ $txId } else { $anchorObj.previous.arweave_tx_id }
+    ipfs_cid     = if($cid){ $cid } else { $anchorObj.previous.ipfs_cid }
+    timestamp_utc= $anchorObj.timestamp_utc
+    node_id      = $anchorObj.node_id
+    root_hash    = $anchorObj.root_hash
+  }
+  $stateObj | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $stateFile -Encoding UTF8
+  Write-Host "[STATE] Updated: $stateFile" -ForegroundColor Cyan
+}
+
+# -------- Recorder emission (anchor update) --------
+$recScript='scripts/Write-Event.ps1'
+if(Test-Path $recScript){
+  try { & $recScript -EventType 'anchor_update' -Payload @{ anchor_id=$anchorObj.anchor_id; arweave_tx=$txId; ipfs_cid=$cid; timestamp_utc=$anchorObj.timestamp_utc } } catch { Write-Host "[WARN] Recorder emission failed: $_" -ForegroundColor Yellow }
+}
+
+Write-Host '[DONE] Network anchoring phase complete.' -ForegroundColor Green

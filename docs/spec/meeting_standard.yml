@@ -1,0 +1,85 @@
+version: 1
+standard: SOV-Meeting-Standard
+description: >
+  Machine-readable meeting framework for sovereign operations.
+  Every meeting = agenda + inputs + decisions + actions + signatures.
+
+meeting_types:
+  DAILY_CELL_STANDUP:
+    cadence: "Daily"
+    duration_minutes: 15
+    participants:
+      - "Cell operators"
+      - "Shift lead"
+      - "QSB assistant"
+    inputs:
+      - "WorkerImpactSnapshot"
+      - "LineBottleneckReport"
+      - "OpenSIFFlags"
+      - "YesterdayTruthTestFindings (if any)"
+    outputs:
+      - "Updated PDCA board for cell"
+      - "New/updated Kaizen tickets"
+      - "Escalation flags (SixSigmaNeeded: true/false)"
+    evidence_binding:
+      log_type: "MEETING_DAILY_CELL"
+      retention_years: 3
+
+  WEEKLY_SIF_REVIEW:
+    cadence: "Weekly"
+    duration_minutes: 60
+    participants:
+      - "HSE lead"
+      - "Cell/Line reps"
+      - "Quality manager"
+      - "QSB safety agent"
+    inputs:
+      - "SIFRegister (open + newly closed)"
+      - "Near-miss reports"
+      - "TruthTest-Safety findings"
+    outputs:
+      - "SIF reclassification and prioritisation"
+      - "Corrective actions linked to projects"
+      - "Updated risk matrix"
+    evidence_binding:
+      log_type: "MEETING_SIF_REVIEW"
+      retention_years: 10
+
+  MONTHLY_PROGRAMME_REVIEW:
+    cadence: "Monthly"
+    duration_minutes: 90
+    participants:
+      - "Programme owner"
+      - "Domain owners (HSE/IT/Finance/etc.)"
+      - "Boardroom-13 constitutional delegate"
+    inputs:
+      - "ProgrammeStatusSnapshot"
+      - "TruthTests (Financial, Operational, Safety)"
+      - "Top-5 SIF items touching this programme"
+    outputs:
+      - "Stage/Constitutional gate result (Advance/Hold/Pivot)"
+      - "Prioritised backlog and resource allocation"
+      - "Updated risk & dependency register"
+    evidence_binding:
+      log_type: "MEETING_PROGRAMME_REVIEW"
+      retention_years: 10
+
+  QUARTERLY_TRUTH_SUMMIT:
+    cadence: "Quarterly"
+    duration_minutes: 180
+    participants:
+      - "Exec team"
+      - "Worker reps / union"
+      - "Boardroom-13 Truth Judge"
+      - "External auditor (optional)"
+    inputs:
+      - "TruthTest reports (all categories)"
+      - "SIF statistics and trend analysis"
+      - "Worker survey summaries"
+    outputs:
+      - "Metric redesign decisions"
+      - "Sanctions for metric gaming (if any)"
+      - "Public transparency statement draft"
+    evidence_binding:
+      log_type: "MEETING_TRUTH_SUMMIT"
+      retention_years: 10

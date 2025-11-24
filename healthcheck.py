@@ -8,19 +8,21 @@ REPORT = Path("Governance/healthcheck_report.json")
 
 
 def docker_ps():
-    p = subprocess.run(["docker", "ps", "--format", "{{.Names}}:::{{.Status}}"], capture_output=True, text=True)
-    names = {}
-    for line in p.stdout.strip().splitlines():
-        if ":::" in line:
-            n, s = line.split(":::", 1)
-            names[n] = s
-    return names
+    try:
+        p = subprocess.run(["docker", "ps", "--format", "{{.Names}}:::{{.Status}}"], capture_output=True, text=True)
+        names = {}
+        for line in p.stdout.strip().splitlines():
+            if ":::" in line:
+                n, s = line.split(":::", 1)
+                names[n] = s
+        return names
+    except FileNotFoundError:
+        return {"status": "Docker not available"}
 
 
 def check_ledger():
     logs = {
-        "insider": Path("Governance/Logs/audit-insider.jsonl").exists(),
-        "stable": Path("Governance/Logs/audit-stable.jsonl").exists(),
+        "audit_chain": Path("Governance/Logs/audit_chain.jsonl").exists(),
     }
     return logs
 
